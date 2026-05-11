@@ -428,7 +428,29 @@ def chat():
             'status': 'ok',
             'kategori': predicted_kategori
         })
-        
+
+@app.route('/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
+@api_key_required
+def handle_ambiguous_unknown():
+    """Endpoint untuk menangani ketika user memilih 'pertanyaan saya tidak ada' pada opsi ambigu"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    data = request.json or {}
+    original_question = data.get('original_question', '').strip()
+    
+    if not original_question:
+        return jsonify({'error': 'Pertanyaan asli tidak ditemukan'}), 400
+    
+    # Simpan ke pertanyaan unknown
+    save_unknown_question(original_question)
+    
+    return jsonify({
+        'status': 'unknown',
+        'jawaban': 'Mohon maaf, saya belum mengerti pertanyaan Anda. Pertanyaan Anda telah saya catat untuk pembelajaran ke depannya.',
+        'original_question': original_question
+    }), 200
+
 @app.route('/api/recommendations', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_recommendations():
