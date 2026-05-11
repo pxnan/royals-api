@@ -1,0 +1,13 @@
+Flask
+flask-cors
+mysql-connector-python
+python-dotenv
+bcrypt
+PyJWT
+scikit-learn
+numpy
+Werkzeug
+Sastrawi
+gunicorn
+psycopg2-binary
+pandas

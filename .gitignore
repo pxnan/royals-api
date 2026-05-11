@@ -1,0 +1,6 @@
+.vercel
+.env
+.env.production
+royals-resto-bot.sql
+vnenv/
+

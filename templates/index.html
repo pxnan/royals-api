@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="../static/logo.png" />
+    <title>API Chatbot Royal's Resto - Dokumentasi Lengkap</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #0a0a0a;
+            color: #e5e5e5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #3b82f6;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 0.5rem;
+        }
+        h2 {
+            font-size: 1.8rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+        h3 {
+            font-size: 1.3rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            color: #60a5fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section {
+            background-color: #1a1a1a;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #2a2a2a;
+        }
+        .endpoint {
+            background-color: #0d0d0d;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+        .method {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            margin-right: 10px;
+        }
+        .method-post { background-color: #10b981; color: white; }
+        .method-get { background-color: #3b82f6; color: white; }
+        .method-put { background-color: #f59e0b; color: white; }
+        .method-delete { background-color: #ef4444; color: white; }
+        .url { font-family: 'Courier New', monospace; font-size: 1rem; color: #60a5fa; word-break: break-all; }
+        pre {
+            background-color: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+            border: 1px solid #2a2a2a;
+        }
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #e5e5e5;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-public { background-color: #6b7280; color: white; }
+        .badge-auth { background-color: #8b5cf6; color: white; }
+        .badge-super { background-color: #ef4444; color: white; }
+        .badge-apikey { background-color: #06b6d4; color: white; }
+        .badge-apikey-token { background-color: #ec489a; color: white; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        th {
+            background-color: #1a1a1a;
+            color: #3b82f6;
+            font-weight: bold;
+        }
+        td {
+            background-color: #0d0d0d;
+        }
+        a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        footer {
+            text-align: center;
+            padding: 30px 0 20px;
+            border-top: 1px solid #2a2a2a;
+            margin-top: 30px;
+            color: #6b7280;
+        }
+        .nav {
+            position: sticky;
+            top: 0;
+            background-color: #0a0a0a;
+            padding: 10px 0;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #2a2a2a;
+            z-index: 100;
+        }
+        .nav a {
+            margin-right: 20px;
+            font-size: 0.9rem;
+        }
+        .base-url {
+            background-color: #1a1a1a;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin-bottom: 20px;
+        }
+        .note {
+            background-color: #1e293b;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 6px;
+        }
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            h1 { font-size: 1.8rem; }
+            h2 { font-size: 1.4rem; }
+            .section { padding: 15px; }
+            table { font-size: 0.8rem; }
+            th, td { padding: 8px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="nav">
+        <a href="#auth">Autentikasi</a>
+        <a href="#chatbot">Chatbot</a>
+        <a href="#admin">Admin</a>
+        <a href="#dataset">Dataset</a>
+        <a href="#unknown">Unknown</a>
+        <a href="#training">Training</a>
+        <a href="#debug">Debug</a>
+    </div>
+
+    <h1>🤖 API Chatbot Royal's Resto</h1>
+    <p>Dokumentasi lengkap API untuk Chatbot Royal's Resto.</p>
+    <div class="base-url">
+        🔗 Base URL Development: <strong>http://localhost:5000</strong><br>
+        🔗 Base URL Production: <strong>https://royals-resto-bot-api.vercel.app</strong>
+    </div>
+    <div class="note">
+        <strong>📌 Catatan Penting Autentikasi:</strong>
+        <ul style="margin-left: 20px; margin-top: 5px;">
+            <li><strong>API Key (X-API-Key)</strong> <span class="badge badge-apikey">Wajib (kecuali debug)</span> — Hampir semua endpoint memerlukan API Key, kecuali beberapa endpoint debug (<code>/health</code>, <code>/cek-csv</code>, <code>/fix-csv</code>, <code>/debug-db</code>, <code>/test-db</code>, <code>/debug-headers</code>).</li>
+            <li><strong>Bearer Token (JWT)</strong> — Endpoint yang mengelola admin, melihat profil, logout, change password, login logs, reset database memerlukan token JWT (didapat dari <code>/login</code>).</li>
+            <li>Role <strong>super_admin</strong> dapat mengelola semua admin dan melihat login logs; <strong>admin</strong> hanya dapat mengelola profil sendiri.</li>
+            <li>Di environment <strong>development</strong>, validasi API Key dilewati (otomatis dianggap valid).</li>
+            <li>Jangan pernah menyimpan kredensial asli di kode frontend. API Key dikonfigurasi di server.</li>
+        </ul>
+    </div>
+
+    <!-- ==================== AUTHENTICATION & AUTHORIZATION ==================== -->
+    <div id="auth">
+        <h2>🔐 Autentikasi & Otorisasi</h2>
+        <div class="section">
+            <h3>API Key (X-API-Key)</h3>
+            <p>Hampir semua endpoint mewajibkan <code>X-API-Key</code> di header. Nilai API Key dikonfigurasi di server (tidak ditampilkan di dokumentasi). Untuk development, header ini tidak diperiksa.</p>
+
+            <h3>JWT Token (Bearer)</h3>
+            <p>Beberapa endpoint yang membutuhkan hak akses admin memerlukan token JWT yang didapat dari <code>/login</code>. Kirim token di header: <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+
+            <h3>1. Login Admin (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/login</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+            <p><strong>Headers:</strong> <code>X-API-Key: your-api-key</code></p>
+            <p><strong>Request Body:</strong></p>
+            <pre>{
+    "username": "admin",
+    "password": "your_password"
+}</pre>
+            <p><strong>Response Sukses (200):</strong></p>
+            <pre>{
+    "authenticated": true,
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "admin": {
+        "id": 1,
+        "username": "admin",
+        "email": "admin@royalsresto.com",
+        "full_name": "Administrator",
+        "role": "super_admin"
+    },
+    "expires_in": 86400
+}</pre>
+
+            <h3>2. Logout (butuh API Key + Token)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/logout</span>
+                <span class="badge badge-apikey-token">API Key + Bearer Token</span>
+            </div>
+
+            <h3>3. Verifikasi Token (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/verify-token</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>4. Ganti Password (butuh API Key + Token)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/change-password</span>
+                <span class="badge badge-apikey-token">API Key + Bearer Token</span>
+            </div>
+
+            <h3>5. Profil Admin yang Login (butuh API Key + Token)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/admin-profile</span>
+                <span class="badge badge-apikey-token">API Key + Bearer Token</span>
+            </div>
+
+            <h3>6. Registrasi Admin Baru (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/api/register</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CHATBOT ==================== -->
+    <div id="chatbot">
+        <h2>💬 Chatbot</h2>
+        <div class="section">
+            <h3>Kirim Pertanyaan (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/chat</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+            <p><strong>Headers:</strong> <code>X-API-Key: your-api-key</code></p>
+            <p><strong>Request Body:</strong> <code>{"pertanyaan": "Apa menu favorit?"}</code></p>
+            <p><strong>Response (sukses):</strong></p>
+            <pre>{
+    "pertanyaan": "Apa menu favorit?",
+    "jawaban": "Menu favorit kami adalah Nasi Goreng Royale...",
+    "status": "ok"
+}</pre>
+            <p><strong>Response (ambigu):</strong></p>
+            <pre>{
+    "pertanyaan": "resto",
+    "opsi_pertanyaan": ["Apa jam buka?", "Dimana lokasi?"],
+    "jawaban": "Pertanyaan mana yang kamu maksud?",
+    "status": "ambigu"
+}</pre>
+            <p><strong>Response (tidak dikenal):</strong> <code>{"pertanyaan": "...", "jawaban": "Mohon maaf, saya belum mengerti pertanyaan Anda.", "status": "unknown"}</code></p>
+        </div>
+    </div>
+
+    <!-- ==================== ADMIN MANAGEMENT (Super Admin only) ==================== -->
+    <div id="admin">
+        <h2>👥 Admin Management (Super Admin Only)</h2>
+        <div class="section">
+            <p>Semua endpoint di bawah ini membutuhkan <strong>API Key + Bearer Token</strong> dengan role <code>super_admin</code>.</p>
+
+            <h3>1. Daftar Semua Admin (pagination & search)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/api/admins?page=1&per_page=10&search=...</span>
+                <span class="badge badge-apikey-token">API Key + Token (super_admin)</span>
+            </div>
+
+            <h3>2. Tambah Admin Baru</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/api/admins</span>
+                <span class="badge badge-apikey-token">API Key + Token (super_admin)</span>
+            </div>
+
+            <h3>3. Update Admin</h3>
+            <div class="endpoint">
+                <span class="method method-put">PUT</span>
+                <span class="url">/api/admins/{admin_id}</span>
+                <span class="badge badge-apikey-token">API Key + Token (super_admin)</span>
+            </div>
+
+            <h3>4. Reset Password Admin</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/api/admins/{admin_id}/reset-password</span>
+                <span class="badge badge-apikey-token">API Key + Token (super_admin)</span>
+            </div>
+
+            <h3>5. Hapus Admin</h3>
+            <div class="endpoint">
+                <span class="method method-delete">DELETE</span>
+                <span class="url">/api/admins/{admin_id}</span>
+                <span class="badge badge-apikey-token">API Key + Token (super_admin)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== DATASET MANAGEMENT ==================== -->
+    <div id="dataset">
+        <h2>📊 Manajemen Dataset (Pertanyaan & Jawaban)</h2>
+        <div class="section">
+            <p>Semua endpoint dataset memerlukan API Key (tidak perlu token JWT).</p>
+
+            <h3>1. Ambil Semua Data (pagination, filter, search)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/get-all-data?page=1&per_page=20&search=menu&kategori=harga</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>2. Tambah Data Baru</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/tambah-data</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>3. Update Data (berdasarkan ID atau index)</h3>
+            <div class="endpoint">
+                <span class="method method-put">PUT</span>
+                <span class="url">/update-data</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>4. Hapus Data (satu item)</h3>
+            <div class="endpoint">
+                <span class="method method-delete">DELETE</span>
+                <span class="url">/delete-data</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>5. Hapus Banyak Data</h3>
+            <div class="endpoint">
+                <span class="method method-delete">DELETE</span>
+                <span class="url">/delete-bulk-data</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>6. Ambil Data Berdasarkan Index</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/get-data/&lt;index&gt;</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>7. Export Dataset ke CSV</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/api/export-data</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>8. Pencarian Data</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/api/search-data?q=kata&kategori=harga</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== UNKNOWN QUESTIONS ==================== -->
+    <div id="unknown">
+        <h2>❓ Pertanyaan Tidak Dikenali</h2>
+        <div class="section">
+            <p>Semua endpoint unknown memerlukan API Key.</p>
+            <h3>1. Daftar Unknown Questions (pagination)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/pertanyaan-unknown?page=1</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>2. Hapus Satu Unknown</h3>
+            <div class="endpoint">
+                <span class="method method-delete">DELETE</span>
+                <span class="url">/delete-unknown</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>3. Hapus Semua Unknown</h3>
+            <div class="endpoint">
+                <span class="method method-delete">DELETE</span>
+                <span class="url">/delete-all-unknown</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODEL TRAINING ==================== -->
+    <div id="training">
+        <h2>🤖 Training Model & Informasi</h2>
+        <div class="section">
+            <div class="note">
+                ⚠️ Pada lingkungan serverless (Vercel), training dibatasi waktu. Gunakan dataset kecil atau training lokal.
+            </div>
+            <h3>1. Latih Model (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/train-model</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>2. Informasi Model (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/model-info</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>3. Daftar Kategori (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/kategori</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== DEBUG, STATS, LOGS ==================== -->
+    <div id="debug">
+        <h2>🐛 Debug, Statistik & Logs</h2>
+        <div class="section">
+            <h3>Health Check (Publik, tanpa autentikasi)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/health</span>
+                <span class="badge badge-public">Public</span>
+            </div>
+
+            <h3>Statistik Dashboard (butuh API Key + Token)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/api/stats</span>
+                <span class="badge badge-apikey-token">API Key + Bearer Token</span>
+            </div>
+
+            <h3>Login Logs (Super Admin only, butuh API Key + Token)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/api/login-logs?page=1&per_page=20</span>
+                <span class="badge badge-apikey-token">API Key + Token (super_admin)</span>
+            </div>
+
+            <h3>Reset Database Unknown (Super Admin only, butuh API Key + Token)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/api/reset-database</span>
+                <span class="badge badge-apikey-token">API Key + Token (super_admin)</span>
+            </div>
+
+            <h3>Cek CSV (Publik, tanpa autentikasi)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/cek-csv</span>
+                <span class="badge badge-public">Public</span>
+            </div>
+
+            <h3>Perbaiki CSV (Publik, tanpa autentikasi)</h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/fix-csv</span>
+                <span class="badge badge-public">Public</span>
+            </div>
+
+            <h3>Debug Database Connection (Publik)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/debug-db</span>
+                <span class="badge badge-public">Public</span>
+            </div>
+
+            <h3>Test DB (Publik)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/test-db</span>
+                <span class="badge badge-public">Public</span>
+            </div>
+
+            <h3>Debug Headers (Publik)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/debug-headers</span>
+                <span class="badge badge-public">Public</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== RINGKASAN SINGKAT ==================== -->
+    <div class="section">
+        <h2>📋 Ringkasan Endpoint Penting</h2>
+        <table>
+            <thead><tr><th>Method</th><th>Endpoint</th><th>Autentikasi</th><th>Deskripsi</th></tr></thead>
+            <tbody>
+                <tr><td>POST</td><td>/login</td><td>API Key</td><td>Login admin</td></tr>
+                <tr><td>POST</td><td>/chat</td><td>API Key</td><td>Chatbot</td></tr>
+                <tr><td>GET</td><td>/api/admins</td><td>API Key + Token (super_admin)</td><td>Daftar admin</td></tr>
+                <tr><td>GET</td><td>/get-all-data</td><td>API Key</td><td>Ambil dataset</td></tr>
+                <tr><td>POST</td><td>/tambah-data</td><td>API Key</td><td>Tambah FAQ</td></tr>
+                <tr><td>GET</td><td>/pertanyaan-unknown</td><td>API Key</td><td>Lihat pertanyaan tidak dikenal</td></tr>
+                <tr><td>POST</td><td>/train-model</td><td>API Key</td><td>Latih model</td></tr>
+                <tr><td>GET</td><td>/api/stats</td><td>API Key + Token</td><td>Statistik dashboard</td></tr>
+                <tr><td>GET</td><td>/api/login-logs</td><td>API Key + Token (super_admin)</td><td>Log login</td></tr>
+                <tr><td>GET</td><td>/health</td><td>Publik</td><td>Health check</td></tr>
+            </tbody>
+        </table>
+        <p class="note">Catatan: Endpoint yang tidak disebutkan di atas (seperti update, delete, reset password, dll.) juga memerlukan API Key, dengan tambahan Bearer Token jika mengakses data admin atau logs.</p>
+    </div>
+
+    <footer>
+        <p>© 2025 Royal's Resto Chatbot API | Developed by Prasasti M Fernanday</p>
+        <p>Dokumentasi ini diperbarui sesuai kode sumber terbaru. Tidak mengandung informasi rahasia.</p>
+    </footer>
+</div>
+</body>
+</html>
