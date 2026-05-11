@@ -42,13 +42,22 @@ FLASK_ENV = os.getenv("FLASK_ENV")
 FLASK_DEBUG = os.getenv("FLASK_DEBUG").lower() == "true"
 FLASK_PORT = int(os.getenv("FLASK_PORT"))
 
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(",")] if allowed_origins_str else ["*"]
 
 API_KEY = os.getenv("API_KEY")
 API_KEY_HEADER = "X-API-Key"
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS"))
+
+# ===================== Inisialisasi Flask =====================
+app = Flask(__name__)
+CORS(app, origins=ALLOWED_ORIGINS,
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+     allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Requested-With"],
+     supports_credentials=True,
+     max_age=86400)
 
 # ==================== Global variables for dataset ====================
 pertanyaan_list = []
@@ -62,9 +71,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY) if SUPABASE_UR
 BUCKET_NAME = "models"
 MODEL_FILE = "model_qa.pkl"
 
-# ===================== Inisialisasi Flask =====================
-app = Flask(__name__)
-CORS(app, origins=ALLOWED_ORIGINS)
 
 # ===================== Handler OPTIONS =====================
 @app.before_request
