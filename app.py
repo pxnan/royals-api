@@ -1044,28 +1044,6 @@ def get_all_data():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/kategori', methods=['GET', 'OPTIONS'])
-@api_key_required
-def get_kategori():
-    if request.method == 'OPTIONS':
-        return '', 200
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'kategori': []}), 200
-        
-        cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT kategori FROM dataset ORDER BY kategori")
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
-        categories = [row[0] for row in rows]
-        return jsonify({'kategori': categories}), 200
-    except Exception as e:
-        logger.error(f"Error in get_kategori: {e}")
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/tambah-data', methods=['POST', 'OPTIONS'])
 @api_key_required
 def tambah_data():
