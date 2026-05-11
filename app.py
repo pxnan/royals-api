@@ -1312,15 +1312,15 @@ def train_model():
             'categories': kategori_list_train
         }
         
-        # ========== SIMPAN KE SUPABASE STORAGE ==========
+        # ========== SIMPAN KE SUPABASE STORAGE (HANYA INI) ==========
         supabase_saved = save_model_to_supabase(qa_data_new)
+        
         if not supabase_saved:
-            logger.warning("Failed to save model to Supabase, saving to local file as fallback")
-            # Fallback ke file lokal
-            model_path = os.path.join(os.getenv("MODEL_BASE_PATH", "model/"), 'model_qa.pkl')
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            with open(model_path, 'wb') as f:
-                pickle.dump(qa_data_new, f)
+            logger.error("Failed to save model to Supabase")
+            return jsonify({
+                'error': 'Gagal menyimpan model ke Supabase. Periksa konfigurasi Supabase.',
+                'status': 'error'
+            }), 500
         
         # Update global variables
         global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
@@ -1333,13 +1333,13 @@ def train_model():
         training_time = time.time() - start_time
         
         return jsonify({
-            'message': 'Model berhasil dilatih' + (' dan disimpan ke Supabase' if supabase_saved else ' (disimpan lokal)'),
+            'message': 'Model berhasil dilatih dan disimpan ke Supabase',
             'training_time': f'{training_time:.2f} detik',
             'total_data': len(pertanyaan_list_train),
             'total_questions': len(pertanyaan_list_train),
             'categories_count': len(set(kategori_list_train)),
             'status': 'success',
-            'saved_to_supabase': supabase_saved
+            'saved_to_supabase': True
         }), 200
         
     except Exception as e:
