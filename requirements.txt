@@ -11,3 +11,4 @@ Sastrawi
 gunicorn
 psycopg2-binary
 pandas
+supabase

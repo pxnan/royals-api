@@ -18,6 +18,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 import pickle
 from preprocessing import preprocess
+from supabase import create_client, Client
 
 # Load environment variables
 load_dotenv()
@@ -48,6 +49,18 @@ API_KEY_HEADER = "X-API-Key"
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS"))
+
+# ==================== Global variables for dataset ====================
+pertanyaan_list = []
+answers = []
+kategori_list = []
+
+# ===================== KONFIGURASI SUPABASE =====================
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY) if SUPABASE_URL and SUPABASE_ANON_KEY else None
+BUCKET_NAME = "models"
+MODEL_FILE = "model_qa.pkl"
 
 # ===================== Inisialisasi Flask =====================
 app = Flask(__name__)
@@ -198,14 +211,86 @@ pertanyaan_list = []
 kategori_list = []
 _models_loaded = False
 
+def load_dataset_from_db():
+    """Load dataset from database table 'dataset' into global variables."""
+    global pertanyaan_list, answers, kategori_list
+    conn = get_db_connection()
+    if conn is None:
+        logger.error("Database connection failed, cannot load dataset")
+        return
+    try:
+        cursor = get_db_cursor(conn, dictionary=True)
+        cursor.execute("SELECT pertanyaan, jawaban, kategori FROM dataset ORDER BY id")
+        rows = cursor.fetchall()
+        pertanyaan_list = [row['pertanyaan'] for row in rows]
+        answers = [row['jawaban'] for row in rows]
+        kategori_list = [row['kategori'] for row in rows]
+        logger.info(f"Dataset loaded from database: {len(pertanyaan_list)} questions")
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error loading dataset from database: {e}")
+        if conn:
+            conn.close()
+
+def load_model_from_supabase():
+    """Load model from Supabase Storage into memory."""
+    if supabase is None:
+        logger.warning("Supabase not configured")
+        return None
+    try:
+        # Download file as bytes
+        file_data = supabase.storage.from_(BUCKET_NAME).download(MODEL_FILE)
+        model_data = pickle.loads(file_data)
+        logger.info("Model loaded from Supabase storage")
+        return model_data
+    except Exception as e:
+        logger.error(f"Failed to load model from Supabase: {e}")
+        return None
+    
+def save_model_to_supabase(model_data):
+    """Save model to Supabase Storage."""
+    if supabase is None:
+        logger.warning("Supabase not configured, cannot save model")
+        return False
+    try:
+        model_bytes = pickle.dumps(model_data)
+        # Try to upload (will fail if file exists)
+        response = supabase.storage.from_(BUCKET_NAME).upload(MODEL_FILE, model_bytes, 
+                                    file_options={"content-type": "application/octet-stream"})
+        logger.info("Model saved to Supabase storage (new file)")
+        return True
+    except Exception as e:
+        # If file exists, update it instead
+        try:
+            supabase.storage.from_(BUCKET_NAME).update(MODEL_FILE, model_bytes, 
+                                    file_options={"content-type": "application/octet-stream"})
+            logger.info("Model updated in Supabase storage")
+            return True
+        except Exception as e2:
+            logger.error(f"Failed to save model to Supabase: {e2}")
+            return False
+
 def load_models_and_data():
     global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list, _models_loaded
     if _models_loaded:
         return
     _models_loaded = True
 
-    # Load model jika ada
-    model_path = os.path.join(os.getenv("MODEL_BASE_PATH"), 'model_qa.pkl')
+    # 1. Load model dari Supabase (prioritas)
+    model_data = load_model_from_supabase()
+    if model_data:
+        model_qa = model_data['model']
+        vectorizer_qa = model_data['vectorizer']
+        answers = model_data['answers']
+        pertanyaan_list = model_data['questions']
+        kategori_list = model_data.get('categories', [])
+        logger.info(f"Model loaded from Supabase: {len(pertanyaan_list)} questions")
+        load_dataset_from_db()   # <--- tambahkan ini
+        return
+
+    # 2. Fallback: load dari file lokal (development)
+    model_path = os.path.join(os.getenv("MODEL_BASE_PATH", "model/"), 'model_qa.pkl')
     try:
         if os.path.exists(model_path):
             import pickle
@@ -216,35 +301,15 @@ def load_models_and_data():
                 answers = qa_data['answers']
                 pertanyaan_list = qa_data['questions']
                 kategori_list = qa_data.get('categories', [])
-            logger.info(f"Model loaded: {len(pertanyaan_list)} questions")
-        else:
-            logger.warning("Model file not found")
-    except Exception as e:
-        logger.error(f"Error loading model: {e}")
-
-    # Load dataset (prioritas database, fallback CSV)
-    conn = get_db_connection()
-    if conn is not None:
-        try:
-            cursor = get_db_cursor(conn, dictionary=True)
-            cursor.execute("SELECT pertanyaan, jawaban, kategori FROM dataset ORDER BY id")
-            rows = cursor.fetchall()
-            pertanyaan_list = [row['pertanyaan'] for row in rows]
-            answers = [row['jawaban'] for row in rows]
-            kategori_list = [row['kategori'] for row in rows]
-            cursor.close()
-            conn.close()
-            logger.info(f"Dataset loaded from DB: {len(pertanyaan_list)} questions")
+            logger.info(f"Model loaded from local file: {len(pertanyaan_list)} questions")
+            load_dataset_from_db()   # <--- tambahkan ini
             return
-        except Exception as e:
-            logger.error(f"Error loading from DB: {e}")
-    # Fallback ke CSV
-    q, a, k = load_dataset_from_csv()
-    if q:
-        pertanyaan_list = q
-        answers = a
-        kategori_list = k
-        logger.info(f"Dataset loaded from CSV fallback: {len(pertanyaan_list)} questions")
+    except Exception as e:
+        logger.error(f"Error loading local model: {e}")
+
+    # 3. Jika tidak ada model, set kosong, tetap ambil dataset dari database
+    load_dataset_from_db()
+    logger.warning("No model available, please train first")
 
 def save_unknown_question(question):
     conn = get_db_connection()
@@ -1194,9 +1259,11 @@ def delete_bulk_data():
     return jsonify({'error': 'Parameter "ids" atau "indices" diperlukan'}), 400
 
 # ==================== TRAINING MODEL ====================
-@app.route('/train-model', methods=['POST'])
+@app.route('/train-model', methods=['POST', 'OPTIONS'])
 @api_key_required
 def train_model():
+    if request.method == 'OPTIONS':
+        return '', 200
     try:
         start_time = time.time()
         
@@ -1214,61 +1281,69 @@ def train_model():
         if not rows:
             return jsonify({'error': 'Dataset kosong, tidak ada data untuk training'}), 400
         
-        # Konversi ke DataFrame
-        import pandas as pd
-        df_train = pd.DataFrame(rows)
+        # Konversi ke list
+        pertanyaan_list_train = [row['pertanyaan'] for row in rows]
+        jawaban_list_train = [row['jawaban'] for row in rows]
+        kategori_list_train = [row['kategori'] for row in rows]
         
-        print("[TRAIN] Loading dataset from DB...")
-        print(f"[TRAIN] Total data: {len(df_train)}")
+        logger.info(f"[TRAIN] Total data: {len(pertanyaan_list_train)}")
         
-        print("[TRAIN] Preprocessing data...")
-        df_train['processed'] = df_train['pertanyaan'].astype(str).apply(preprocess)
+        # Preprocessing
+        from preprocessing import preprocess
+        processed_list = [preprocess(q) for q in pertanyaan_list_train]
         
-        X_train = df_train['processed']
-        y_train = list(range(len(df_train)))
-        
-        print("[TRAIN] Vectorizing text...")
+        # Vectorizing
+        from sklearn.feature_extraction.text import TfidfVectorizer
         vectorizer = TfidfVectorizer()
-        X_train_tfidf = vectorizer.fit_transform(X_train)
+        X_train_tfidf = vectorizer.fit_transform(processed_list)
         
-        print("[TRAIN] Training SVM model...")
+        # Training
+        from sklearn.svm import LinearSVC
+        y_train = list(range(len(pertanyaan_list_train)))
         model = LinearSVC()
         model.fit(X_train_tfidf, y_train)
         
-        print("[TRAIN] Saving model...")
+        # Siapkan data model
         qa_data_new = {
             'model': model,
             'vectorizer': vectorizer,
-            'answers': df_train['jawaban'].tolist(),
-            'questions': df_train['pertanyaan'].tolist(),
-            'categories': df_train['kategori'].tolist()
+            'answers': jawaban_list_train,
+            'questions': pertanyaan_list_train,
+            'categories': kategori_list_train
         }
         
-        model_path = os.path.join(os.getenv("MODEL_BASE_PATH", "model/"), 'model_qa.pkl')
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
-        with open(model_path, 'wb') as f:
-            pickle.dump(qa_data_new, f)
+        # ========== SIMPAN KE SUPABASE STORAGE ==========
+        supabase_saved = save_model_to_supabase(qa_data_new)
+        if not supabase_saved:
+            logger.warning("Failed to save model to Supabase, saving to local file as fallback")
+            # Fallback ke file lokal
+            model_path = os.path.join(os.getenv("MODEL_BASE_PATH", "model/"), 'model_qa.pkl')
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            with open(model_path, 'wb') as f:
+                pickle.dump(qa_data_new, f)
         
+        # Update global variables
         global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
         model_qa = model
         vectorizer_qa = vectorizer
-        answers = df_train['jawaban'].tolist()
-        pertanyaan_list = df_train['pertanyaan'].tolist()
-        kategori_list = df_train['kategori'].tolist()
+        answers = jawaban_list_train
+        pertanyaan_list = pertanyaan_list_train
+        kategori_list = kategori_list_train
         
         training_time = time.time() - start_time
         
         return jsonify({
-            'message': 'Model berhasil dilatih',
+            'message': 'Model berhasil dilatih' + (' dan disimpan ke Supabase' if supabase_saved else ' (disimpan lokal)'),
             'training_time': f'{training_time:.2f} detik',
-            'total_data': len(df_train),
-            'total_questions': len(pertanyaan_list),
-            'categories_count': len(df_train['kategori'].unique()),
-            'status': 'success'
+            'total_data': len(pertanyaan_list_train),
+            'total_questions': len(pertanyaan_list_train),
+            'categories_count': len(set(kategori_list_train)),
+            'status': 'success',
+            'saved_to_supabase': supabase_saved
         }), 200
         
     except Exception as e:
-        print(f"[ERROR] Train model: {e}")
+        logger.error(f"Error in train_model: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Terjadi kesalahan saat training: {str(e)}'}), 500
