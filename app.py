@@ -439,6 +439,8 @@ def handle_ambiguous_unknown():
     data = request.json or {}
     original_question = data.get('original_question', '').strip()
     
+    print(f"[DEBUG] Menerima permintaan ambiguous-unknown dengan pertanyaan: {original_question}")  # Debugging
+    
     if not original_question:
         return jsonify({'error': 'Pertanyaan asli tidak ditemukan'}), 400
     
