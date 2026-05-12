@@ -154,6 +154,10 @@
             margin: 15px 0;
             border-radius: 6px;
         }
+        .warning {
+            background-color: #451a1a;
+            border-left: 4px solid #ef4444;
+        }
         @media (max-width: 768px) {
             body { padding: 10px; }
             h1 { font-size: 1.8rem; }
@@ -270,7 +274,7 @@
     <div id="chatbot">
         <h2>💬 Chatbot</h2>
         <div class="section">
-            <h3>Kirim Pertanyaan (butuh API Key)</h3>
+            <h3>1. Kirim Pertanyaan (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
                 <span class="url">/chat</span>
@@ -282,7 +286,8 @@
             <pre>{
     "pertanyaan": "Apa menu favorit?",
     "jawaban": "Menu favorit kami adalah Nasi Goreng Royale...",
-    "status": "ok"
+    "status": "ok",
+    "kategori": "menu"
 }</pre>
             <p><strong>Response (ambigu):</strong></p>
             <pre>{
@@ -291,7 +296,44 @@
     "jawaban": "Pertanyaan mana yang kamu maksud?",
     "status": "ambigu"
 }</pre>
-            <p><strong>Response (tidak dikenal):</strong> <code>{"pertanyaan": "...", "jawaban": "Mohon maaf, saya belum mengerti pertanyaan Anda.", "status": "unknown"}</code></p>
+            <p><strong>Response (tidak dikenal):</strong></p>
+            <pre>{
+    "pertanyaan": "...",
+    "jawaban": "Mohon maaf, saya belum mengerti pertanyaan Anda.",
+    "status": "unknown"
+}</pre>
+
+            <h3>2. Pertanyaan Ambigu - "Tidak Ada" (butuh API Key) <span class="badge badge-apikey">NEW!</span></h3>
+            <div class="endpoint">
+                <span class="method method-post">POST</span>
+                <span class="url">/chat/ambiguous-unknown</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+            <p>Endpoint ini digunakan ketika user memilih opsi <strong>"Pertanyaan yang saya maksud tidak ada"</strong> pada respons ambigu. Pertanyaan asli user akan disimpan ke tabel <code>pertanyaan_unknow</code> untuk pembelajaran model di masa depan.</p>
+            <p><strong>Request Body:</strong></p>
+            <pre>{
+    "original_question": "Saya mau pesan apa ya?"
+}</pre>
+            <p><strong>Response Sukses (200):</strong></p>
+            <pre>{
+    "status": "unknown",
+    "jawaban": "Mohon maaf, saya belum mengerti pertanyaan Anda. Pertanyaan Anda telah saya catat untuk pembelajaran ke depannya.",
+    "original_question": "Saya mau pesan apa ya?"
+}</pre>
+
+            <h3>3. Rekomendasi Pertanyaan Random (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/api/recommendations</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
+
+            <h3>4. Rekomendasi Berdasarkan Kategori (butuh API Key)</h3>
+            <div class="endpoint">
+                <span class="method method-get">GET</span>
+                <span class="url">/api/recommendations/by-category?kategori=menu</span>
+                <span class="badge badge-apikey">Requires API Key</span>
+            </div>
         </div>
     </div>
 
@@ -350,6 +392,7 @@
                 <span class="url">/get-all-data?page=1&per_page=20&search=menu&kategori=harga</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
+            <p><strong>Response mencakup:</strong> data, total_data, total_pages, dan daftar categories unik untuk filter.</p>
 
             <h3>2. Tambah Data Baru</h3>
             <div class="endpoint">
@@ -357,6 +400,12 @@
                 <span class="url">/tambah-data</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
+            <p><strong>Request Body:</strong></p>
+            <pre>{
+    "pertanyaan": "Harga nasi goreng berapa?",
+    "jawaban": "Nasi Goreng Rp25.000",
+    "kategori": "harga"
+}</pre>
 
             <h3>3. Update Data (berdasarkan ID atau index)</h3>
             <div class="endpoint">
@@ -407,12 +456,25 @@
         <h2>❓ Pertanyaan Tidak Dikenali</h2>
         <div class="section">
             <p>Semua endpoint unknown memerlukan API Key.</p>
+            
+            <div class="note warning">
+                <strong>⚠️ Perubahan:</strong> Pagination di <code>/pertanyaan-unknown</code> menggunakan <strong>10 data per halaman</strong> (fixed).
+            </div>
+
             <h3>1. Daftar Unknown Questions (pagination)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
                 <span class="url">/pertanyaan-unknown?page=1</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
+            <p><strong>Response:</strong></p>
+            <pre>{
+    "page": 1,
+    "per_page": 10,
+    "total_data": 45,
+    "total_pages": 5,
+    "data": [...]
+}</pre>
 
             <h3>2. Hapus Satu Unknown</h3>
             <div class="endpoint">
@@ -420,6 +482,7 @@
                 <span class="url">/delete-unknown</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
+            <p><strong>Request Body:</strong> <code>{"id": 123}</code></p>
 
             <h3>3. Hapus Semua Unknown</h3>
             <div class="endpoint">
@@ -437,12 +500,26 @@
             <div class="note">
                 ⚠️ Pada lingkungan serverless (Vercel), training dibatasi waktu. Gunakan dataset kecil atau training lokal.
             </div>
+            <div class="note">
+                💾 Model disimpan ke <strong>Supabase Storage</strong> (bucket "models") setelah training.
+            </div>
+            
             <h3>1. Latih Model (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
                 <span class="url">/train-model</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
+            <p><strong>Response Sukses:</strong></p>
+            <pre>{
+    "message": "Model berhasil dilatih dan disimpan ke Supabase",
+    "training_time": "2.35 detik",
+    "total_data": 150,
+    "total_questions": 150,
+    "categories_count": 8,
+    "status": "success",
+    "saved_to_supabase": true
+}</pre>
 
             <h3>2. Informasi Model (butuh API Key)</h3>
             <div class="endpoint">
@@ -477,6 +554,14 @@
                 <span class="url">/api/stats</span>
                 <span class="badge badge-apikey-token">API Key + Bearer Token</span>
             </div>
+            <p><strong>Response:</strong></p>
+            <pre>{
+    "total_admin": 5,
+    "total_unknown_questions": 23,
+    "total_questions": 150,
+    "total_categories": 8,
+    "model_loaded": true
+}</pre>
 
             <h3>Login Logs (Super Admin only, butuh API Key + Token)</h3>
             <div class="endpoint">
@@ -533,15 +618,18 @@
     <div class="section">
         <h2>📋 Ringkasan Endpoint Penting</h2>
         <table>
-            <thead><tr><th>Method</th><th>Endpoint</th><th>Autentikasi</th><th>Deskripsi</th></tr></thead>
+            <thead>
+                <tr><th>Method</th><th>Endpoint</th><th>Autentikasi</th><th>Deskripsi</th></tr>
+            </thead>
             <tbody>
                 <tr><td>POST</td><td>/login</td><td>API Key</td><td>Login admin</td></tr>
-                <tr><td>POST</td><td>/chat</td><td>API Key</td><td>Chatbot</td></tr>
+                <tr><td>POST</td><td>/chat</td><td>API Key</td><td>Chatbot utama</td></tr>
+                <tr><td>POST</td><td>/chat/ambiguous-unknown</td><td>API Key</td><td>Simpan pertanyaan ambigu ke unknown</td></tr>
                 <tr><td>GET</td><td>/api/admins</td><td>API Key + Token (super_admin)</td><td>Daftar admin</td></tr>
                 <tr><td>GET</td><td>/get-all-data</td><td>API Key</td><td>Ambil dataset</td></tr>
                 <tr><td>POST</td><td>/tambah-data</td><td>API Key</td><td>Tambah FAQ</td></tr>
-                <tr><td>GET</td><td>/pertanyaan-unknown</td><td>API Key</td><td>Lihat pertanyaan tidak dikenal</td></tr>
-                <tr><td>POST</td><td>/train-model</td><td>API Key</td><td>Latih model</td></tr>
+                <tr><td>GET</td><td>/pertanyaan-unknown</td><td>API Key</td><td>Lihat pertanyaan tidak dikenal (10 per page)</td></tr>
+                <tr><td>POST</td><td>/train-model</td><td>API Key</td><td>Latih model (simpan ke Supabase)</td></tr>
                 <tr><td>GET</td><td>/api/stats</td><td>API Key + Token</td><td>Statistik dashboard</td></tr>
                 <tr><td>GET</td><td>/api/login-logs</td><td>API Key + Token (super_admin)</td><td>Log login</td></tr>
                 <tr><td>GET</td><td>/health</td><td>Publik</td><td>Health check</td></tr>
