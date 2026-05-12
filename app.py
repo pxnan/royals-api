@@ -1515,10 +1515,13 @@ def register_admin():
     return jsonify({'message': 'Registrasi berhasil', 'admin_id': new_id}), 201
 
 @app.route('/api/stats', methods=['GET', 'OPTIONS'])
-# @api_key_required
+# @api_key_required  # Bisa di-uncomment jika perlu autentikasi
 def get_dashboard_stats():
     if request.method == 'OPTIONS':
         return '', 200
+    
+    # Load models and data terlebih dahulu
+    load_models_and_data()
     
     conn = get_db_connection()
     if conn is None:
@@ -1546,8 +1549,14 @@ def get_dashboard_stats():
         cursor.close()
         conn.close()
         
-        # Cek apakah model sudah di-load (bisa dari global variable atau file)
-        model_loaded = model_qa is not None
+        # Cek apakah model sudah di-load (dari global variable)
+        model_loaded = model_qa is not None and vectorizer_qa is not None
+        
+        # Jika model belum loaded, coba check dari Supabase
+        if not model_loaded:
+            # Coba cek apakah ada model di Supabase
+            model_data = load_model_from_supabase()
+            model_loaded = model_data is not None
         
         return jsonify({
             'total_admin': total_admin,
