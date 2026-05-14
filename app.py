@@ -435,7 +435,7 @@ def handle_ambiguous_unknown():
         'original_question': original_question
     }), 200
 
-@app.route('/api/recommendations', methods=['GET', 'OPTIONS'])
+@app.route('/recommendations', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_recommendations():
     if request.method == 'OPTIONS':
@@ -456,7 +456,7 @@ def get_recommendations():
         logger.error(f"Error in get_recommendations: {e}")
         return jsonify({'error': str(e)}), 500
     
-@app.route('/api/recommendations/by-category', methods=['GET', 'OPTIONS'])
+@app.route('/recommendations/by-category', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_recommendations_by_category():
     if request.method == 'OPTIONS':
@@ -658,7 +658,7 @@ def get_admin_profile():
     return jsonify({'admin': admin}), 200
 
 # ==================== KELOLA ADMIN ====================
-@app.route('/api/admins', methods=['GET', 'OPTIONS'])
+@app.route('/admins', methods=['GET', 'OPTIONS'])
 @api_key_required
 @token_required
 def get_all_admins():
@@ -724,7 +724,7 @@ def get_all_admins():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/admins', methods=['POST', 'OPTIONS'])
+@app.route('/admins', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def create_admin():
@@ -777,7 +777,7 @@ def create_admin():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/admins/<int:admin_id>', methods=['PUT', 'OPTIONS'])
+@app.route('/admins/<int:admin_id>', methods=['PUT', 'OPTIONS'])
 @api_key_required
 @token_required
 def update_admin(admin_id):
@@ -821,7 +821,7 @@ def update_admin(admin_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/admins/<int:admin_id>/reset-password', methods=['POST', 'OPTIONS'])
+@app.route('/admins/<int:admin_id>/reset-password', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def reset_admin_password(admin_id):
@@ -859,7 +859,7 @@ def reset_admin_password(admin_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/admins/<int:admin_id>', methods=['DELETE', 'OPTIONS'])
+@app.route('/admins/<int:admin_id>', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 @token_required
 def delete_admin(admin_id):
@@ -1456,7 +1456,7 @@ def get_data_by_index(index):
         'kategori': row['kategori']
     }), 200
 
-@app.route('/api/register', methods=['POST', 'OPTIONS'])
+@app.route('/register', methods=['POST', 'OPTIONS'])
 @api_key_required
 def register_admin():
     if request.method == 'OPTIONS':
@@ -1496,7 +1496,7 @@ def register_admin():
     conn.close()
     return jsonify({'message': 'Registrasi berhasil', 'admin_id': new_id}), 201
 
-@app.route('/api/stats', methods=['GET', 'OPTIONS'])
+@app.route('/stats', methods=['GET', 'OPTIONS'])
 # @api_key_required  # Bisa di-uncomment jika perlu autentikasi
 def get_dashboard_stats():
     if request.method == 'OPTIONS':
@@ -1553,7 +1553,7 @@ def get_dashboard_stats():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/export-data', methods=['GET', 'OPTIONS'])
+@app.route('/export-data', methods=['GET', 'OPTIONS'])
 @api_key_required
 def export_data():
     if request.method == 'OPTIONS':
@@ -1574,7 +1574,7 @@ def export_data():
         writer.writerow([row['pertanyaan'], row['jawaban'], row['kategori']])
     return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=dataset_export.csv'}), 200
 
-@app.route('/api/search-data', methods=['GET', 'OPTIONS'])
+@app.route('/search-data', methods=['GET', 'OPTIONS'])
 @api_key_required
 def search_data():
     if request.method == 'OPTIONS':
@@ -1610,7 +1610,7 @@ def search_data():
     conn.close()
     return jsonify({'data': results, 'total': len(results)}), 200
 
-@app.route('/api/login-logs', methods=['GET', 'OPTIONS'])
+@app.route('/login-logs', methods=['GET', 'OPTIONS'])
 @api_key_required
 @token_required
 def get_login_logs():
@@ -1644,7 +1644,7 @@ def get_login_logs():
             log['login_time'] = log['login_time'].strftime('%Y-%m-%d %H:%M:%S')
     return jsonify({'page': page, 'per_page': per_page, 'total_data': total, 'total_pages': total_pages, 'data': logs}), 200
 
-@app.route('/api/reset-database', methods=['POST', 'OPTIONS'])
+@app.route('/reset-database', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def reset_database():
