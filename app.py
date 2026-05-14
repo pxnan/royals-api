@@ -295,24 +295,6 @@ def load_models_and_data():
         load_dataset_from_db()   # <--- tambahkan ini
         return
 
-    # 2. Fallback: load dari file lokal (development)
-    model_path = os.path.join(os.getenv("MODEL_BASE_PATH", "model/"), 'model_qa.pkl')
-    try:
-        if os.path.exists(model_path):
-            import pickle
-            with open(model_path, 'rb') as f:
-                qa_data = pickle.load(f)
-                model_qa = qa_data['model']
-                vectorizer_qa = qa_data['vectorizer']
-                answers = qa_data['answers']
-                pertanyaan_list = qa_data['questions']
-                kategori_list = qa_data.get('categories', [])
-            logger.info(f"Model loaded from local file: {len(pertanyaan_list)} questions")
-            load_dataset_from_db()   # <--- tambahkan ini
-            return
-    except Exception as e:
-        logger.error(f"Error loading local model: {e}")
-
     # 3. Jika tidak ada model, set kosong, tetap ambil dataset dari database
     load_dataset_from_db()
     logger.warning("No model available, please train first")
