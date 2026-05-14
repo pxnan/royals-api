@@ -314,7 +314,7 @@ def save_unknown_question(question):
         logger.info(f"Unknown question (not saved): {question}")
 
 # ==================== ENDPOINTS =====================
-@app.route('/api/')
+@app.route('/')
 def index():
     return render_template('index.html')
 
