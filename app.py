@@ -80,8 +80,8 @@ def handle_preflight():
         response.status_code = 200
         return response
 
-@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
-@app.route('/<path:path>', methods=['OPTIONS'])
+@app.route('/api/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/api/<path:path>', methods=['OPTIONS'])
 def options_handler(path):
     return '', 200
 
@@ -314,15 +314,15 @@ def save_unknown_question(question):
         logger.info(f"Unknown question (not saved): {question}")
 
 # ==================== ENDPOINTS =====================
-@app.route('/')
+@app.route('/api/')
 def index():
     return render_template('index.html')
 
-@app.route('/health')
+@app.route('/api/health')
 def health():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
-@app.route('/chat', methods=['POST', 'OPTIONS'])
+@app.route('/api/chat', methods=['POST', 'OPTIONS'])
 @api_key_required
 def chat():
     if request.method == 'OPTIONS':
@@ -411,7 +411,7 @@ def chat():
             'kategori': predicted_kategori
         })
 
-@app.route('/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
+@app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
 @api_key_required
 def handle_ambiguous_unknown():
     """Endpoint untuk menangani ketika user memilih 'pertanyaan saya tidak ada' pada opsi ambigu"""
@@ -435,7 +435,7 @@ def handle_ambiguous_unknown():
         'original_question': original_question
     }), 200
 
-@app.route('/recommendations', methods=['GET', 'OPTIONS'])
+@app.route('/api/recommendations', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_recommendations():
     if request.method == 'OPTIONS':
@@ -456,7 +456,7 @@ def get_recommendations():
         logger.error(f"Error in get_recommendations: {e}")
         return jsonify({'error': str(e)}), 500
     
-@app.route('/recommendations/by-category', methods=['GET', 'OPTIONS'])
+@app.route('/api/recommendations/by-category', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_recommendations_by_category():
     if request.method == 'OPTIONS':
@@ -483,7 +483,7 @@ def get_recommendations_by_category():
         return jsonify({'error': str(e)}), 500
 
 # ==================== AUTHENTICATION ====================
-@app.route('/login', methods=['POST', 'OPTIONS'])
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
 @api_key_required
 def login():
     if request.method == 'OPTIONS':
@@ -552,7 +552,7 @@ def login():
             conn.close()
         return jsonify({'error': 'Terjadi kesalahan saat login', 'authenticated': False}), 500
 
-@app.route('/logout', methods=['POST', 'OPTIONS'])
+@app.route('/api/logout', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def logout():
@@ -573,7 +573,7 @@ def logout():
             pass
     return jsonify({'message': 'Logout berhasil', 'authenticated': False}), 200
 
-@app.route('/verify-token', methods=['GET', 'OPTIONS'])
+@app.route('/api/verify-token', methods=['GET', 'OPTIONS'])
 @api_key_required
 def verify_token_endpoint():
     if request.method == 'OPTIONS':
@@ -593,7 +593,7 @@ def verify_token_endpoint():
         'role': payload['role']
     }), 200
 
-@app.route('/change-password', methods=['POST', 'OPTIONS'])
+@app.route('/api/change-password', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def change_password():
@@ -635,7 +635,7 @@ def change_password():
     conn.close()
     return jsonify({'message': 'Password berhasil diubah'}), 200
 
-@app.route('/admin-profile', methods=['GET', 'OPTIONS'])
+@app.route('/api/admin-profile', methods=['GET', 'OPTIONS'])
 @api_key_required
 @token_required
 def get_admin_profile():
@@ -658,7 +658,7 @@ def get_admin_profile():
     return jsonify({'admin': admin}), 200
 
 # ==================== KELOLA ADMIN ====================
-@app.route('/admins', methods=['GET', 'OPTIONS'])
+@app.route('/api/admins', methods=['GET', 'OPTIONS'])
 @api_key_required
 @token_required
 def get_all_admins():
@@ -724,7 +724,7 @@ def get_all_admins():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/admins', methods=['POST', 'OPTIONS'])
+@app.route('/api/admins', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def create_admin():
@@ -777,7 +777,7 @@ def create_admin():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/admins/<int:admin_id>', methods=['PUT', 'OPTIONS'])
+@app.route('/api/admins/<int:admin_id>', methods=['PUT', 'OPTIONS'])
 @api_key_required
 @token_required
 def update_admin(admin_id):
@@ -821,7 +821,7 @@ def update_admin(admin_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/admins/<int:admin_id>/reset-password', methods=['POST', 'OPTIONS'])
+@app.route('/api/admins/<int:admin_id>/reset-password', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def reset_admin_password(admin_id):
@@ -859,7 +859,7 @@ def reset_admin_password(admin_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/admins/<int:admin_id>', methods=['DELETE', 'OPTIONS'])
+@app.route('/api/admins/<int:admin_id>', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 @token_required
 def delete_admin(admin_id):
@@ -893,7 +893,7 @@ def delete_admin(admin_id):
         return jsonify({'error': str(e)}), 500
 
 # ==================== UNKNOWN QUESTIONS ====================
-@app.route('/pertanyaan-unknown', methods=['GET', 'OPTIONS'])
+@app.route('/api/pertanyaan-unknown', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_unknown_questions():
     if request.method == 'OPTIONS':
@@ -914,7 +914,7 @@ def get_unknown_questions():
     total_pages = (total + per_page - 1) // per_page
     return jsonify({'page': page, 'per_page': per_page, 'total_data': total, 'total_pages': total_pages, 'data': data}), 200
 
-@app.route('/delete-unknown', methods=['DELETE', 'OPTIONS'])
+@app.route('/api/delete-unknown', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 def delete_unknown():
     if request.method == 'OPTIONS':
@@ -936,7 +936,7 @@ def delete_unknown():
         return jsonify({'error': 'Data tidak ditemukan'}), 404
     return jsonify({'message': 'Pertanyaan berhasil dihapus', 'status': 'success'}), 200
 
-@app.route('/delete-all-unknown', methods=['DELETE', 'OPTIONS'])
+@app.route('/api/delete-all-unknown', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 def delete_all_unknown():
     if request.method == 'OPTIONS':
@@ -953,7 +953,7 @@ def delete_all_unknown():
     return jsonify({'message': f'{affected} pertanyaan berhasil dihapus', 'status': 'success', 'deleted_count': affected}), 200
 
 # ==================== KATEGORI & MODEL INFO ====================
-@app.route('/kategori', methods=['GET', 'OPTIONS'])
+@app.route('/api/kategori', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_kategori():
     if request.method == 'OPTIONS':
@@ -962,7 +962,7 @@ def get_kategori():
     categories = sorted(list(set(kategori_list)))
     return jsonify({'kategori': categories})
 
-@app.route('/model-info', methods=['GET', 'OPTIONS'])
+@app.route('/api/model-info', methods=['GET', 'OPTIONS'])
 @api_key_required
 def model_info():
     if request.method == 'OPTIONS':
@@ -978,7 +978,7 @@ def model_info():
     }), 200
 
 # ==================== DATASET MANAGEMENT ====================
-@app.route('/get-all-data', methods=['GET', 'OPTIONS'])
+@app.route('/api/get-all-data', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_all_data():
     if request.method == 'OPTIONS':
@@ -1050,7 +1050,7 @@ def get_all_data():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/tambah-data', methods=['POST', 'OPTIONS'])
+@app.route('/api/tambah-data', methods=['POST', 'OPTIONS'])
 @api_key_required
 def tambah_data():
     if request.method == 'OPTIONS':
@@ -1089,7 +1089,7 @@ def tambah_data():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/update-data', methods=['PUT', 'OPTIONS'])
+@app.route('/api/update-data', methods=['PUT', 'OPTIONS'])
 @api_key_required
 def update_data():
     if request.method == 'OPTIONS':
@@ -1150,7 +1150,7 @@ def update_data():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/delete-data', methods=['DELETE', 'OPTIONS'])
+@app.route('/api/delete-data', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 def delete_data():
     if request.method == 'OPTIONS':
@@ -1206,7 +1206,7 @@ def delete_data():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/delete-bulk-data', methods=['DELETE', 'OPTIONS'])
+@app.route('/api/delete-bulk-data', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 def delete_bulk_data():
     if request.method == 'OPTIONS':
@@ -1277,7 +1277,7 @@ def delete_bulk_data():
     return jsonify({'error': 'Parameter "ids" atau "indices" diperlukan'}), 400
 
 # ==================== TRAINING MODEL ====================
-@app.route('/train-model', methods=['POST', 'OPTIONS'])
+@app.route('/api/train-model', methods=['POST', 'OPTIONS'])
 @api_key_required
 def train_model():
     if request.method == 'OPTIONS':
@@ -1368,7 +1368,7 @@ def train_model():
 
 
 # ==================== DEBUG ====================
-@app.route('/cek-csv', methods=['GET', 'OPTIONS'])
+@app.route('/api/cek-csv', methods=['GET', 'OPTIONS'])
 def cek_csv():
     if request.method == 'OPTIONS':
         return '', 200
@@ -1397,7 +1397,7 @@ def cek_csv():
         logger.error(f"Error in cek_csv: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/fix-csv', methods=['POST', 'OPTIONS'])
+@app.route('/api/fix-csv', methods=['POST', 'OPTIONS'])
 def fix_csv():
     if request.method == 'OPTIONS':
         return '', 200
@@ -1420,7 +1420,7 @@ def fix_csv():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/debug-db')
+@app.route('/api/debug-db')
 def debug_db():
     try:
         conn = get_db_connection()
@@ -1432,7 +1432,7 @@ def debug_db():
         return f"FAILED: {str(e)}"
 
 # ==================== ADDITIONAL ENDPOINTS ====================
-@app.route('/get-data/<int:index>', methods=['GET', 'OPTIONS'])
+@app.route('/api/get-data/<int:index>', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_data_by_index(index):
     if request.method == 'OPTIONS':
@@ -1456,7 +1456,7 @@ def get_data_by_index(index):
         'kategori': row['kategori']
     }), 200
 
-@app.route('/register', methods=['POST', 'OPTIONS'])
+@app.route('/api/register', methods=['POST', 'OPTIONS'])
 @api_key_required
 def register_admin():
     if request.method == 'OPTIONS':
@@ -1496,7 +1496,7 @@ def register_admin():
     conn.close()
     return jsonify({'message': 'Registrasi berhasil', 'admin_id': new_id}), 201
 
-@app.route('/stats', methods=['GET', 'OPTIONS'])
+@app.route('/api/stats', methods=['GET', 'OPTIONS'])
 # @api_key_required  # Bisa di-uncomment jika perlu autentikasi
 def get_dashboard_stats():
     if request.method == 'OPTIONS':
@@ -1553,7 +1553,7 @@ def get_dashboard_stats():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/export-data', methods=['GET', 'OPTIONS'])
+@app.route('/api/export-data', methods=['GET', 'OPTIONS'])
 @api_key_required
 def export_data():
     if request.method == 'OPTIONS':
@@ -1574,7 +1574,7 @@ def export_data():
         writer.writerow([row['pertanyaan'], row['jawaban'], row['kategori']])
     return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=dataset_export.csv'}), 200
 
-@app.route('/search-data', methods=['GET', 'OPTIONS'])
+@app.route('/api/search-data', methods=['GET', 'OPTIONS'])
 @api_key_required
 def search_data():
     if request.method == 'OPTIONS':
@@ -1610,7 +1610,7 @@ def search_data():
     conn.close()
     return jsonify({'data': results, 'total': len(results)}), 200
 
-@app.route('/login-logs', methods=['GET', 'OPTIONS'])
+@app.route('/api/login-logs', methods=['GET', 'OPTIONS'])
 @api_key_required
 @token_required
 def get_login_logs():
@@ -1644,7 +1644,7 @@ def get_login_logs():
             log['login_time'] = log['login_time'].strftime('%Y-%m-%d %H:%M:%S')
     return jsonify({'page': page, 'per_page': per_page, 'total_data': total, 'total_pages': total_pages, 'data': logs}), 200
 
-@app.route('/reset-database', methods=['POST', 'OPTIONS'])
+@app.route('/api/reset-database', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def reset_database():
@@ -1663,7 +1663,7 @@ def reset_database():
     conn.close()
     return jsonify({'message': 'Database berhasil direset', 'deleted_unknown_questions': deleted}), 200
 
-@app.route('/test-db')
+@app.route('/api/test-db')
 def test_db():
     try:
         conn = get_db_connection()
@@ -1675,7 +1675,7 @@ def test_db():
     except Exception as e:
         return str(e)
 
-@app.route('/debug-headers', methods=['GET'])
+@app.route('/api/debug-headers', methods=['GET'])
 def debug_headers():
     print("=== INCOMING HEADERS ===")
     for key, value in request.headers.items():
