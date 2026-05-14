@@ -184,13 +184,14 @@
     <p>Dokumentasi lengkap API untuk Chatbot Royal's Resto.</p>
     <div class="base-url">
         🔗 Base URL Development: <strong>http://localhost:5000</strong><br>
-        🔗 Base URL Production: <strong>https://royals-resto-bot-api.vercel.app</strong>
+        🔗 Base URL Production: <strong>https://royals-resto-api.vercel.app</strong><br>
+        <span class="text-yellow-400">📌 Semua endpoint menggunakan prefix <code>/api</code> (kecuali <code>/</code> dan <code>/health</code>)</span>
     </div>
     <div class="note">
         <strong>📌 Catatan Penting Autentikasi:</strong>
         <ul style="margin-left: 20px; margin-top: 5px;">
-            <li><strong>API Key (X-API-Key)</strong> <span class="badge badge-apikey">Wajib (kecuali debug)</span> — Hampir semua endpoint memerlukan API Key, kecuali beberapa endpoint debug (<code>/health</code>, <code>/cek-csv</code>, <code>/fix-csv</code>, <code>/debug-db</code>, <code>/test-db</code>, <code>/debug-headers</code>).</li>
-            <li><strong>Bearer Token (JWT)</strong> — Endpoint yang mengelola admin, melihat profil, logout, change password, login logs, reset database memerlukan token JWT (didapat dari <code>/login</code>).</li>
+            <li><strong>API Key (X-API-Key)</strong> <span class="badge badge-apikey">Wajib (kecuali debug)</span> — Hampir semua endpoint memerlukan API Key, kecuali beberapa endpoint debug (<code>/api/health</code>, <code>/api/cek-csv</code>, <code>/api/fix-csv</code>, <code>/api/debug-db</code>, <code>/api/test-db</code>, <code>/api/debug-headers</code>).</li>
+            <li><strong>Bearer Token (JWT)</strong> — Endpoint yang mengelola admin, melihat profil, logout, change password, login logs, reset database memerlukan token JWT (didapat dari <code>/api/login</code>).</li>
             <li>Role <strong>super_admin</strong> dapat mengelola semua admin dan melihat login logs; <strong>admin</strong> hanya dapat mengelola profil sendiri.</li>
             <li>Di environment <strong>development</strong>, validasi API Key dilewati (otomatis dianggap valid).</li>
             <li>Jangan pernah menyimpan kredensial asli di kode frontend. API Key dikonfigurasi di server.</li>
@@ -205,12 +206,12 @@
             <p>Hampir semua endpoint mewajibkan <code>X-API-Key</code> di header. Nilai API Key dikonfigurasi di server (tidak ditampilkan di dokumentasi). Untuk development, header ini tidak diperiksa.</p>
 
             <h3>JWT Token (Bearer)</h3>
-            <p>Beberapa endpoint yang membutuhkan hak akses admin memerlukan token JWT yang didapat dari <code>/login</code>. Kirim token di header: <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+            <p>Beberapa endpoint yang membutuhkan hak akses admin memerlukan token JWT yang didapat dari <code>/api/login</code>. Kirim token di header: <code>Authorization: Bearer &lt;token&gt;</code>.</p>
 
             <h3>1. Login Admin (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/login</span>
+                <span class="url">/api/login</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Headers:</strong> <code>X-API-Key: your-api-key</code></p>
@@ -236,28 +237,28 @@
             <h3>2. Logout (butuh API Key + Token)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/logout</span>
+                <span class="url">/api/logout</span>
                 <span class="badge badge-apikey-token">API Key + Bearer Token</span>
             </div>
 
             <h3>3. Verifikasi Token (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/verify-token</span>
+                <span class="url">/api/verify-token</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
 
             <h3>4. Ganti Password (butuh API Key + Token)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/change-password</span>
+                <span class="url">/api/change-password</span>
                 <span class="badge badge-apikey-token">API Key + Bearer Token</span>
             </div>
 
             <h3>5. Profil Admin yang Login (butuh API Key + Token)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/admin-profile</span>
+                <span class="url">/api/admin-profile</span>
                 <span class="badge badge-apikey-token">API Key + Bearer Token</span>
             </div>
 
@@ -277,7 +278,7 @@
             <h3>1. Kirim Pertanyaan (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/chat</span>
+                <span class="url">/api/chat</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Headers:</strong> <code>X-API-Key: your-api-key</code></p>
@@ -306,7 +307,7 @@
             <h3>2. Pertanyaan Ambigu - "Tidak Ada" (butuh API Key) <span class="badge badge-apikey">NEW!</span></h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/chat/ambiguous-unknown</span>
+                <span class="url">/api/chat/ambiguous-unknown</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p>Endpoint ini digunakan ketika user memilih opsi <strong>"Pertanyaan yang saya maksud tidak ada"</strong> pada respons ambigu. Pertanyaan asli user akan disimpan ke tabel <code>pertanyaan_unknow</code> untuk pembelajaran model di masa depan.</p>
@@ -389,7 +390,7 @@
             <h3>1. Ambil Semua Data (pagination, filter, search)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/get-all-data?page=1&per_page=20&search=menu&kategori=harga</span>
+                <span class="url">/api/get-all-data?page=1&per_page=20&search=menu&kategori=harga</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Response mencakup:</strong> data, total_data, total_pages, dan daftar categories unik untuk filter.</p>
@@ -397,7 +398,7 @@
             <h3>2. Tambah Data Baru</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/tambah-data</span>
+                <span class="url">/api/tambah-data</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Request Body:</strong></p>
@@ -410,28 +411,28 @@
             <h3>3. Update Data (berdasarkan ID atau index)</h3>
             <div class="endpoint">
                 <span class="method method-put">PUT</span>
-                <span class="url">/update-data</span>
+                <span class="url">/api/update-data</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
 
             <h3>4. Hapus Data (satu item)</h3>
             <div class="endpoint">
                 <span class="method method-delete">DELETE</span>
-                <span class="url">/delete-data</span>
+                <span class="url">/api/delete-data</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
 
             <h3>5. Hapus Banyak Data</h3>
             <div class="endpoint">
                 <span class="method method-delete">DELETE</span>
-                <span class="url">/delete-bulk-data</span>
+                <span class="url">/api/delete-bulk-data</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
 
             <h3>6. Ambil Data Berdasarkan Index</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/get-data/&lt;index&gt;</span>
+                <span class="url">/api/get-data/&lt;index&gt;</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
 
@@ -458,13 +459,13 @@
             <p>Semua endpoint unknown memerlukan API Key.</p>
             
             <div class="note warning">
-                <strong>⚠️ Perubahan:</strong> Pagination di <code>/pertanyaan-unknown</code> menggunakan <strong>10 data per halaman</strong> (fixed).
+                <strong>⚠️ Perubahan:</strong> Pagination di <code>/api/pertanyaan-unknown</code> menggunakan <strong>10 data per halaman</strong> (fixed).
             </div>
 
             <h3>1. Daftar Unknown Questions (pagination)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/pertanyaan-unknown?page=1</span>
+                <span class="url">/api/pertanyaan-unknown?page=1</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Response:</strong></p>
@@ -479,7 +480,7 @@
             <h3>2. Hapus Satu Unknown</h3>
             <div class="endpoint">
                 <span class="method method-delete">DELETE</span>
-                <span class="url">/delete-unknown</span>
+                <span class="url">/api/delete-unknown</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Request Body:</strong> <code>{"id": 123}</code></p>
@@ -487,7 +488,7 @@
             <h3>3. Hapus Semua Unknown</h3>
             <div class="endpoint">
                 <span class="method method-delete">DELETE</span>
-                <span class="url">/delete-all-unknown</span>
+                <span class="url">/api/delete-all-unknown</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
         </div>
@@ -507,7 +508,7 @@
             <h3>1. Latih Model (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/train-model</span>
+                <span class="url">/api/train-model</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Response Sukses:</strong></p>
@@ -524,14 +525,14 @@
             <h3>2. Informasi Model (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/model-info</span>
+                <span class="url">/api/model-info</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
 
             <h3>3. Daftar Kategori (butuh API Key)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/kategori</span>
+                <span class="url">/api/kategori</span>
                 <span class="badge badge-apikey">Requires API Key</span>
             </div>
         </div>
@@ -544,15 +545,15 @@
             <h3>Health Check (Publik, tanpa autentikasi)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/health</span>
+                <span class="url">/api/health</span>
                 <span class="badge badge-public">Public</span>
             </div>
 
-            <h3>Statistik Dashboard (butuh API Key + Token)</h3>
+            <h3>Statistik Dashboard (butuh API Key, tanpa Token)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
                 <span class="url">/api/stats</span>
-                <span class="badge badge-apikey-token">API Key + Bearer Token</span>
+                <span class="badge badge-apikey">Requires API Key</span>
             </div>
             <p><strong>Response:</strong></p>
             <pre>{
@@ -580,35 +581,35 @@
             <h3>Cek CSV (Publik, tanpa autentikasi)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/cek-csv</span>
+                <span class="url">/api/cek-csv</span>
                 <span class="badge badge-public">Public</span>
             </div>
 
             <h3>Perbaiki CSV (Publik, tanpa autentikasi)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
-                <span class="url">/fix-csv</span>
+                <span class="url">/api/fix-csv</span>
                 <span class="badge badge-public">Public</span>
             </div>
 
             <h3>Debug Database Connection (Publik)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/debug-db</span>
+                <span class="url">/api/debug-db</span>
                 <span class="badge badge-public">Public</span>
             </div>
 
             <h3>Test DB (Publik)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/test-db</span>
+                <span class="url">/api/test-db</span>
                 <span class="badge badge-public">Public</span>
             </div>
 
             <h3>Debug Headers (Publik)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
-                <span class="url">/debug-headers</span>
+                <span class="url">/api/debug-headers</span>
                 <span class="badge badge-public">Public</span>
             </div>
         </div>
@@ -622,17 +623,17 @@
                 <tr><th>Method</th><th>Endpoint</th><th>Autentikasi</th><th>Deskripsi</th></tr>
             </thead>
             <tbody>
-                <tr><td>POST</td><td>/login</td><td>API Key</td><td>Login admin</td></tr>
-                <tr><td>POST</td><td>/chat</td><td>API Key</td><td>Chatbot utama</td></tr>
-                <tr><td>POST</td><td>/chat/ambiguous-unknown</td><td>API Key</td><td>Simpan pertanyaan ambigu ke unknown</td></tr>
+                <tr><td>POST</td><td>/api/login</td><td>API Key</td><td>Login admin</td></tr>
+                <tr><td>POST</td><td>/api/chat</td><td>API Key</td><td>Chatbot utama</td></tr>
+                <tr><td>POST</td><td>/api/chat/ambiguous-unknown</td><td>API Key</td><td>Simpan pertanyaan ambigu ke unknown</td></tr>
                 <tr><td>GET</td><td>/api/admins</td><td>API Key + Token (super_admin)</td><td>Daftar admin</td></tr>
-                <tr><td>GET</td><td>/get-all-data</td><td>API Key</td><td>Ambil dataset</td></tr>
-                <tr><td>POST</td><td>/tambah-data</td><td>API Key</td><td>Tambah FAQ</td></tr>
-                <tr><td>GET</td><td>/pertanyaan-unknown</td><td>API Key</td><td>Lihat pertanyaan tidak dikenal (10 per page)</td></tr>
-                <tr><td>POST</td><td>/train-model</td><td>API Key</td><td>Latih model (simpan ke Supabase)</td></tr>
-                <tr><td>GET</td><td>/api/stats</td><td>API Key + Token</td><td>Statistik dashboard</td></tr>
+                <tr><td>GET</td><td>/api/get-all-data</td><td>API Key</td><td>Ambil dataset</td></tr>
+                <tr><td>POST</td><td>/api/tambah-data</td><td>API Key</td><td>Tambah FAQ</td></tr>
+                <tr><td>GET</td><td>/api/pertanyaan-unknown</td><td>API Key</td><td>Lihat pertanyaan tidak dikenal (10 per page)</td></tr>
+                <tr><td>POST</td><td>/api/train-model</td><td>API Key</td><td>Latih model (simpan ke Supabase)</td></tr>
+                <tr><td>GET</td><td>/api/stats</td><td>API Key</td><td>Statistik dashboard</td></tr>
                 <tr><td>GET</td><td>/api/login-logs</td><td>API Key + Token (super_admin)</td><td>Log login</td></tr>
-                <tr><td>GET</td><td>/health</td><td>Publik</td><td>Health check</td></tr>
+                <tr><td>GET</td><td>/api/health</td><td>Publik</td><td>Health check</td></tr>
             </tbody>
         </table>
         <p class="note">Catatan: Endpoint yang tidak disebutkan di atas (seperti update, delete, reset password, dll.) juga memerlukan API Key, dengan tambahan Bearer Token jika mengakses data admin atau logs.</p>
