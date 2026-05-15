@@ -1050,10 +1050,11 @@ def get_all_data():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-# ==================== ENDPOINT UNKNOWN QUESTIONS TERBARU ====================
-@app.route('/api/unknown-recent', methods=['GET', 'OPTIONS'])
+# ==================== ENDPOINT UNTUK 5 DATA TERBARU ====================
+
+@app.route('/api/unknown/recent', methods=['GET', 'OPTIONS'])
 @api_key_required
-def get_unknown_recent():
+def get_recent_unknown():
     """Endpoint untuk mengambil 5 pertanyaan unknown terbaru"""
     if request.method == 'OPTIONS':
         return '', 200
@@ -1071,20 +1072,18 @@ def get_unknown_recent():
         
         return jsonify({
             'data': data,
-            'total': len(data),
-            'status': 'success'
+            'total': len(data)
         }), 200
     except Exception as e:
-        logger.error(f"Error in get_unknown_recent: {e}")
+        logger.error(f"Error in get_recent_unknown: {e}")
         if conn:
             conn.close()
         return jsonify({'error': str(e)}), 500
 
 
-# ==================== ENDPOINT DATASET TERBARU ====================
-@app.route('/api/dataset-recent', methods=['GET', 'OPTIONS'])
+@app.route('/api/dataset/recent', methods=['GET', 'OPTIONS'])
 @api_key_required
-def get_dataset_recent():
+def get_recent_dataset():
     """Endpoint untuk mengambil 5 data dataset terbaru"""
     if request.method == 'OPTIONS':
         return '', 200
@@ -1105,17 +1104,17 @@ def get_dataset_recent():
             data.append({
                 'id': row['id'],
                 'pertanyaan': row['pertanyaan'],
-                'jawaban': row['jawaban'][:50] + '...' if len(row['jawaban']) > 50 else row['jawaban'],
+                'jawaban': row['jawaban'][:50] + ('...' if len(row['jawaban']) > 50 else '') if row['jawaban'] else '',
+                'jawaban_full': row['jawaban'],
                 'kategori': row['kategori']
             })
         
         return jsonify({
             'data': data,
-            'total': len(data),
-            'status': 'success'
+            'total': len(data)
         }), 200
     except Exception as e:
-        logger.error(f"Error in get_dataset_recent: {e}")
+        logger.error(f"Error in get_recent_dataset: {e}")
         if conn:
             conn.close()
         return jsonify({'error': str(e)}), 500
