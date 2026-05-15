@@ -1050,6 +1050,76 @@ def get_all_data():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
+# ==================== ENDPOINT UNKNOWN QUESTIONS TERBARU ====================
+@app.route('/api/unknown-recent', methods=['GET', 'OPTIONS'])
+@api_key_required
+def get_unknown_recent():
+    """Endpoint untuk mengambil 5 pertanyaan unknown terbaru"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'data': [], 'total': 0}), 200
+    
+    try:
+        cursor = get_db_cursor(conn, dictionary=True)
+        cursor.execute("SELECT id, pertanyaan, created_at FROM pertanyaan_unknow ORDER BY id DESC LIMIT 5")
+        data = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'data': data,
+            'total': len(data),
+            'status': 'success'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in get_unknown_recent: {e}")
+        if conn:
+            conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== ENDPOINT DATASET TERBARU ====================
+@app.route('/api/dataset-recent', methods=['GET', 'OPTIONS'])
+@api_key_required
+def get_dataset_recent():
+    """Endpoint untuk mengambil 5 data dataset terbaru"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'data': [], 'total': 0}), 500
+    
+    try:
+        cursor = get_db_cursor(conn, dictionary=True)
+        cursor.execute("SELECT id, pertanyaan, jawaban, kategori FROM dataset ORDER BY id DESC LIMIT 5")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        data = []
+        for row in rows:
+            data.append({
+                'id': row['id'],
+                'pertanyaan': row['pertanyaan'],
+                'jawaban': row['jawaban'][:50] + '...' if len(row['jawaban']) > 50 else row['jawaban'],
+                'kategori': row['kategori']
+            })
+        
+        return jsonify({
+            'data': data,
+            'total': len(data),
+            'status': 'success'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in get_dataset_recent: {e}")
+        if conn:
+            conn.close()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/tambah-data', methods=['POST', 'OPTIONS'])
 @api_key_required
 def tambah_data():
