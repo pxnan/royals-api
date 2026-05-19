@@ -93,11 +93,10 @@ def hash_password(password):
 def verify_password(password, hashed):
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
-def generate_token(admin_id, username, role):
+def generate_token(admin_id, username):
     payload = {
         'admin_id': admin_id,
         'username': username,
-        'role': role,
         'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
         'iat': datetime.utcnow()
     }
@@ -292,10 +291,10 @@ def load_models_and_data():
         pertanyaan_list = model_data['questions']
         kategori_list = model_data.get('categories', [])
         logger.info(f"Model loaded from Supabase: {len(pertanyaan_list)} questions")
-        load_dataset_from_db()   # <--- tambahkan ini
+        load_dataset_from_db()
         return
 
-    # 3. Jika tidak ada model, set kosong, tetap ambil dataset dari database
+    # 2. Jika tidak ada model, set kosong, tetap ambil dataset dari database
     load_dataset_from_db()
     logger.warning("No model available, please train first")
 
@@ -379,7 +378,6 @@ def chat():
             if user_input_clean == pertanyaan.lower().strip():
                 exact_match_idx = idx
                 break
-        # Jika exact match, kirim jawaban dengan kategori
         if exact_match_idx >= 0:
             return jsonify({
                 'pertanyaan': user_input,
@@ -387,7 +385,6 @@ def chat():
                 'status': 'ok',
                 'kategori': kategori_list[exact_match_idx] if kategori_list else None
             })
-        # Jika tidak exact match, kirim opsi ambigu (tanpa kategori)
         similar_questions = [pertanyaan_list[i] for i in top_indices if i < len(pertanyaan_list)]
         return jsonify({
             'pertanyaan': user_input,
@@ -421,12 +418,11 @@ def handle_ambiguous_unknown():
     data = request.json or {}
     original_question = data.get('original_question', '').strip()
     
-    print(f"[DEBUG] Menerima permintaan ambiguous-unknown dengan pertanyaan: {original_question}")  # Debugging
+    print(f"[DEBUG] Menerima permintaan ambiguous-unknown dengan pertanyaan: {original_question}")
     
     if not original_question:
         return jsonify({'error': 'Pertanyaan asli tidak ditemukan'}), 400
     
-    # Simpan ke pertanyaan unknown
     save_unknown_question(original_question)
     
     return jsonify({
@@ -445,7 +441,6 @@ def get_recommendations():
         if conn is None:
             return jsonify({'error': 'Database tidak tersedia'}), 500
         cursor = conn.cursor()
-        # Gunakan RAND() untuk MySQL (atau RANDOM() untuk PostgreSQL)
         cursor.execute("SELECT pertanyaan FROM dataset ORDER BY RAND() LIMIT 3")
         rows = cursor.fetchall()
         cursor.close()
@@ -502,7 +497,7 @@ def login():
     try:
         cursor = get_db_cursor(conn, dictionary=True)
         cursor.execute(
-            "SELECT id, username, password, email, full_name, role, is_active FROM admin WHERE username = %s",
+            "SELECT id, username, password, email, full_name, is_active FROM admin WHERE username = %s",
             (username,)
         )
         admin = cursor.fetchone()
@@ -527,7 +522,7 @@ def login():
         conn.commit()
         update_cursor.close()
 
-        token = generate_token(admin['id'], admin['username'], admin['role'])
+        token = generate_token(admin['id'], admin['username'])
         cursor.close()
         conn.close()
 
@@ -535,8 +530,7 @@ def login():
             'id': admin['id'],
             'username': admin['username'],
             'email': admin['email'],
-            'full_name': admin['full_name'],
-            'role': admin['role']
+            'full_name': admin['full_name']
         }
 
         return jsonify({
@@ -558,19 +552,6 @@ def login():
 def logout():
     if request.method == 'OPTIONS':
         return '', 200
-    token = request.headers.get('Authorization')
-    if token and token.startswith('Bearer '):
-        token = token[7:]
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM admin_sessions WHERE session_token = %s", (token,))
-            conn.commit()
-            cursor.close()
-            conn.close()
-        except:
-            pass
     return jsonify({'message': 'Logout berhasil', 'authenticated': False}), 200
 
 @app.route('/api/verify-token', methods=['GET', 'OPTIONS'])
@@ -589,8 +570,7 @@ def verify_token_endpoint():
     return jsonify({
         'authenticated': True,
         'admin_id': payload['admin_id'],
-        'username': payload['username'],
-        'role': payload['role']
+        'username': payload['username']
     }), 200
 
 @app.route('/api/change-password', methods=['POST', 'OPTIONS'])
@@ -644,9 +624,9 @@ def get_admin_profile():
     admin_id = request.admin['admin_id']
     conn = get_db_connection()
     if conn is None:
-        return jsonify({'admin': {'id': admin_id, 'username': 'admin', 'role': 'super_admin'}}), 200
+        return jsonify({'admin': {'id': admin_id, 'username': 'admin'}}), 200
     cursor = get_db_cursor(conn, dictionary=True)
-    cursor.execute("SELECT id, username, email, full_name, role, is_active, last_login, created_at FROM admin WHERE id = %s", (admin_id,))
+    cursor.execute("SELECT id, username, email, full_name, is_active, last_login, created_at FROM admin WHERE id = %s", (admin_id,))
     admin = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -664,8 +644,6 @@ def get_admin_profile():
 def get_all_admins():
     if request.method == 'OPTIONS':
         return '', 200
-    if request.admin['role'] != 'super_admin':
-        return jsonify({'error': 'Anda tidak memiliki izin'}), 403
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
@@ -679,7 +657,7 @@ def get_all_admins():
     try:
         cursor = get_db_cursor(conn, dictionary=True)
         query = """
-            SELECT id, username, email, full_name, role, is_active, last_login, created_at
+            SELECT id, username, email, full_name, is_active, last_login, created_at
             FROM admin
         """
         params = []
@@ -724,21 +702,18 @@ def get_all_admins():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/admins', methods=['POST', 'OPTIONS'])
+@app.route('/api/add/admin', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
 def create_admin():
     if request.method == 'OPTIONS':
         return '', 200
-    if request.admin['role'] != 'super_admin':
-        return jsonify({'error': 'Tidak memiliki izin'}), 403
 
     data = request.json or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
     email = data.get('email', '').strip()
     full_name = data.get('full_name', '').strip()
-    role = data.get('role', 'admin')
     is_active = data.get('is_active', True)
 
     if not username or not password or not email or not full_name:
@@ -761,8 +736,8 @@ def create_admin():
 
         hashed = hash_password(password)
         cursor.execute(
-            "INSERT INTO admin (username, password, email, full_name, role, is_active) VALUES (%s, %s, %s, %s, %s, %s)",
-            (username, hashed, email, full_name, role, int(is_active))
+            "INSERT INTO admin (username, password, email, full_name, is_active) VALUES (%s, %s, %s, %s, %s)",
+            (username, hashed, email, full_name, int(is_active))
         )
         conn.commit()
         new_id = cursor.lastrowid
@@ -783,14 +758,20 @@ def create_admin():
 def update_admin(admin_id):
     if request.method == 'OPTIONS':
         return '', 200
-    if request.admin['role'] != 'super_admin':
-        return jsonify({'error': 'Tidak memiliki izin'}), 403
+
+    current_admin_id = request.admin['admin_id']
+    
+    # Admin hanya bisa mengedit akunnya sendiri
+    if current_admin_id != admin_id:
+        return jsonify({'error': 'Anda hanya dapat mengedit akun Anda sendiri'}), 403
 
     data = request.json or {}
     email = data.get('email', '').strip()
     full_name = data.get('full_name', '').strip()
-    role = data.get('role', 'admin')
     is_active = data.get('is_active', True)
+
+    if not email or not full_name:
+        return jsonify({'error': 'Email dan Nama Lengkap harus diisi'}), 400
 
     conn = get_db_connection()
     if conn is None:
@@ -801,13 +782,15 @@ def update_admin(admin_id):
         cursor.execute("SELECT id FROM admin WHERE id = %s", (admin_id,))
         if not cursor.fetchone():
             return jsonify({'error': 'Admin tidak ditemukan'}), 404
+        
+        # Cek email duplikat (kecuali email sendiri)
         cursor.execute("SELECT id FROM admin WHERE email = %s AND id != %s", (email, admin_id))
         if cursor.fetchone():
             return jsonify({'error': 'Email sudah digunakan oleh admin lain'}), 409
 
         cursor.execute(
-            "UPDATE admin SET email=%s, full_name=%s, role=%s, is_active=%s, updated_at=NOW() WHERE id=%s",
-            (email, full_name, role, int(is_active), admin_id)
+            "UPDATE admin SET email=%s, full_name=%s, is_active=%s, updated_at=NOW() WHERE id=%s",
+            (email, full_name, int(is_active), admin_id)
         )
         conn.commit()
         cursor.close()
@@ -827,8 +810,12 @@ def update_admin(admin_id):
 def reset_admin_password(admin_id):
     if request.method == 'OPTIONS':
         return '', 200
-    if request.admin['role'] != 'super_admin':
-        return jsonify({'error': 'Tidak memiliki izin'}), 403
+
+    current_admin_id = request.admin['admin_id']
+    
+    # Admin hanya bisa reset password akunnya sendiri
+    if current_admin_id != admin_id:
+        return jsonify({'error': 'Anda hanya dapat mereset password akun Anda sendiri'}), 403
 
     data = request.json or {}
     new_password = data.get('new_password', '').strip()
@@ -858,33 +845,40 @@ def reset_admin_password(admin_id):
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/api/admins/<int:admin_id>', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 @token_required
 def delete_admin(admin_id):
     if request.method == 'OPTIONS':
         return '', 200
-    if request.admin['role'] != 'super_admin':
-        return jsonify({'error': 'Tidak memiliki izin'}), 403
-    if request.admin['admin_id'] == admin_id:
-        return jsonify({'error': 'Tidak dapat menghapus akun sendiri'}), 400
 
+    current_admin_id = request.admin['admin_id']
+    
+    # Tidak bisa menghapus akun sendiri
+    if current_admin_id == admin_id:
+        return jsonify({'error': 'Anda tidak dapat menghapus akun Anda sendiri'}), 403
+    
+    # Cek apakah admin yang akan dihapus ada
     conn = get_db_connection()
     if conn is None:
         return jsonify({'error': 'Database tidak tersedia'}), 500
-
+    
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM admin WHERE id = %s", (admin_id,))
         if not cursor.fetchone():
             return jsonify({'error': 'Admin tidak ditemukan'}), 404
-
+        
+        # Hapus admin
         cursor.execute("DELETE FROM admin WHERE id = %s", (admin_id,))
         conn.commit()
+        
+        # Catat ke log
+        logger.info(f"Admin {current_admin_id} menghapus admin {admin_id}")
+        
         cursor.close()
         conn.close()
-        return jsonify({'message': 'Admin berhasil dihapus'}), 200
+        return jsonify({'message': 'Admin berhasil dihapus', 'deleted_id': admin_id}), 200
     except Exception as e:
         conn.rollback()
         logger.error(f"Error deleting admin: {e}")
@@ -967,7 +961,6 @@ def get_kategori():
 def model_info():
     if request.method == 'OPTIONS':
         return '', 200
-    # Memuat model dan data dari file .pkl (jika belum) ke variabel global
     load_models_and_data()
     return jsonify({
         'total_questions': len(pertanyaan_list),
@@ -998,7 +991,6 @@ def get_all_data():
         base_query = "SELECT id, pertanyaan, jawaban, kategori FROM dataset WHERE 1=1"
         params = []
         
-        # Pencarian di kolom pertanyaan ATAU jawaban
         if search:
             base_query += " AND (LOWER(pertanyaan) LIKE LOWER(%s) OR LOWER(jawaban) LIKE LOWER(%s))"
             search_param = f"%{search}%"
@@ -1028,7 +1020,6 @@ def get_all_data():
                 'kategori': row['kategori']
             })
         
-        # Ambil daftar kategori unik untuk filter
         cursor.execute("SELECT DISTINCT kategori FROM dataset ORDER BY kategori")
         kategori_rows = cursor.fetchall()
         categories = [row['kategori'] for row in kategori_rows]
@@ -1042,7 +1033,7 @@ def get_all_data():
             'total_data': total,
             'total_pages': total_pages,
             'data': data,
-            'categories': categories  # <--- KIRIMKAN KATEGORI
+            'categories': categories
         }), 200
     except Exception as e:
         logger.error(f"Error in get_all_data: {e}")
@@ -1051,11 +1042,9 @@ def get_all_data():
         return jsonify({'error': str(e)}), 500
 
 # ==================== ENDPOINT UNTUK 5 DATA TERBARU ====================
-
 @app.route('/api/unknown/recent', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_recent_unknown():
-    """Endpoint untuk mengambil 5 pertanyaan unknown terbaru"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -1080,11 +1069,9 @@ def get_recent_unknown():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/api/dataset/recent', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_recent_dataset():
-    """Endpoint untuk mengambil 5 data dataset terbaru"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -1157,7 +1144,6 @@ def tambah_data():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/api/update-data', methods=['PUT', 'OPTIONS'])
 @api_key_required
 def update_data():
@@ -1218,7 +1204,6 @@ def update_data():
             conn.close()
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/api/delete-data', methods=['DELETE', 'OPTIONS'])
 @api_key_required
 def delete_data():
@@ -1273,7 +1258,6 @@ def delete_data():
     except Exception as e:
         logger.error(f"Delete error: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/delete-bulk-data', methods=['DELETE', 'OPTIONS'])
 @api_key_required
@@ -1354,7 +1338,6 @@ def train_model():
     try:
         start_time = time.time()
         
-        # Ambil data dari database
         conn = get_db_connection()
         if conn is None:
             return jsonify({'error': 'Database tidak tersedia'}), 500
@@ -1368,29 +1351,24 @@ def train_model():
         if not rows:
             return jsonify({'error': 'Dataset kosong, tidak ada data untuk training'}), 400
         
-        # Konversi ke list
         pertanyaan_list_train = [row['pertanyaan'] for row in rows]
         jawaban_list_train = [row['jawaban'] for row in rows]
         kategori_list_train = [row['kategori'] for row in rows]
         
         logger.info(f"[TRAIN] Total data: {len(pertanyaan_list_train)}")
         
-        # Preprocessing
         from preprocessing import preprocess
         processed_list = [preprocess(q) for q in pertanyaan_list_train]
         
-        # Vectorizing
         from sklearn.feature_extraction.text import TfidfVectorizer
         vectorizer = TfidfVectorizer()
         X_train_tfidf = vectorizer.fit_transform(processed_list)
         
-        # Training
         from sklearn.svm import LinearSVC
         y_train = list(range(len(pertanyaan_list_train)))
         model = LinearSVC()
         model.fit(X_train_tfidf, y_train)
         
-        # Siapkan data model
         qa_data_new = {
             'model': model,
             'vectorizer': vectorizer,
@@ -1399,7 +1377,6 @@ def train_model():
             'categories': kategori_list_train
         }
         
-        # ========== SIMPAN KE SUPABASE STORAGE (HANYA INI) ==========
         supabase_saved = save_model_to_supabase(qa_data_new)
         
         if not supabase_saved:
@@ -1409,7 +1386,6 @@ def train_model():
                 'status': 'error'
             }), 500
         
-        # Update global variables
         global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
         model_qa = model
         vectorizer_qa = vectorizer
@@ -1434,7 +1410,6 @@ def train_model():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Terjadi kesalahan saat training: {str(e)}'}), 500
-
 
 # ==================== DEBUG ====================
 @app.route('/api/cek-csv', methods=['GET', 'OPTIONS'])
@@ -1557,8 +1532,8 @@ def register_admin():
         return jsonify({'error': 'Email sudah digunakan'}), 409
     hashed = hash_password(password)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO admin (username, password, email, full_name, role, is_active) VALUES (%s, %s, %s, %s, %s, %s)",
-                   (username, hashed, email, full_name, 'admin', 1))
+    cursor.execute("INSERT INTO admin (username, password, email, full_name, is_active) VALUES (%s, %s, %s, %s, 1)",
+                   (username, hashed, email, full_name))
     conn.commit()
     new_id = cursor.lastrowid
     cursor.close()
@@ -1566,12 +1541,10 @@ def register_admin():
     return jsonify({'message': 'Registrasi berhasil', 'admin_id': new_id}), 201
 
 @app.route('/api/stats', methods=['GET', 'OPTIONS'])
-# @api_key_required  # Bisa di-uncomment jika perlu autentikasi
 def get_dashboard_stats():
     if request.method == 'OPTIONS':
         return '', 200
     
-    # Load models and data terlebih dahulu
     load_models_and_data()
     
     conn = get_db_connection()
@@ -1581,31 +1554,24 @@ def get_dashboard_stats():
     try:
         cursor = get_db_cursor(conn, dictionary=True)
         
-        # Total admin
         cursor.execute("SELECT COUNT(*) as total FROM admin")
         total_admin = cursor.fetchone()['total']
         
-        # Total unknown questions
         cursor.execute("SELECT COUNT(*) as total FROM pertanyaan_unknow")
         total_unknown = cursor.fetchone()['total']
         
-        # Total questions dari dataset
         cursor.execute("SELECT COUNT(*) as total FROM dataset")
         total_questions = cursor.fetchone()['total']
         
-        # Total unique categories dari dataset
         cursor.execute("SELECT COUNT(DISTINCT kategori) as total FROM dataset")
         total_categories = cursor.fetchone()['total']
         
         cursor.close()
         conn.close()
         
-        # Cek apakah model sudah di-load (dari global variable)
         model_loaded = model_qa is not None and vectorizer_qa is not None
         
-        # Jika model belum loaded, coba check dari Supabase
         if not model_loaded:
-            # Coba cek apakah ada model di Supabase
             model_data = load_model_from_supabase()
             model_loaded = model_data is not None
         
@@ -1685,8 +1651,6 @@ def search_data():
 def get_login_logs():
     if request.method == 'OPTIONS':
         return '', 200
-    if request.admin['role'] != 'super_admin':
-        return jsonify({'error': 'Tidak memiliki izin'}), 403
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     offset = (page - 1) * per_page
@@ -1719,8 +1683,6 @@ def get_login_logs():
 def reset_database():
     if request.method == 'OPTIONS':
         return '', 200
-    if request.admin['role'] != 'super_admin':
-        return jsonify({'error': 'Tidak memiliki izin'}), 403
     conn = get_db_connection()
     if conn is None:
         return jsonify({'message': 'Database berhasil direset (demo)', 'deleted_unknown_questions': 0}), 200
