@@ -615,10 +615,11 @@ def change_password():
     conn.close()
     return jsonify({'message': 'Password berhasil diubah'}), 200
 
-@app.route('/api/verify-password', methods=['POST', 'OPTIONS'])
+# ==================== VERIFIKASI PASSWORD ====================
+@app.route('/api/verify-admin-password', methods=['POST', 'OPTIONS'])
 @api_key_required
 @token_required
-def verify_password():
+def verify_admin_password():
     """Endpoint untuk memverifikasi password admin yang sedang login"""
     if request.method == 'OPTIONS':
         return '', 200
@@ -644,13 +645,14 @@ def verify_password():
         if not admin:
             return jsonify({'error': 'Admin tidak ditemukan', 'valid': False}), 404
         
+        # Gunakan fungsi verify_password yang sudah ada
         if verify_password(password, admin['password']):
             return jsonify({'valid': True, 'message': 'Password valid'}), 200
         else:
             return jsonify({'valid': False, 'error': 'Password salah'}), 401
             
     except Exception as e:
-        logger.error(f"Error in verify_password: {e}")
+        logger.error(f"Error in verify_admin_password: {e}")
         if conn:
             conn.close()
         return jsonify({'error': str(e), 'valid': False}), 500
