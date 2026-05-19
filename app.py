@@ -615,6 +615,46 @@ def change_password():
     conn.close()
     return jsonify({'message': 'Password berhasil diubah'}), 200
 
+@app.route('/api/verify-password', methods=['POST', 'OPTIONS'])
+@api_key_required
+@token_required
+def verify_password():
+    """Endpoint untuk memverifikasi password admin yang sedang login"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    data = request.json or {}
+    password = data.get('password', '').strip()
+    
+    if not password:
+        return jsonify({'error': 'Password harus diisi', 'valid': False}), 400
+    
+    admin_id = request.admin['admin_id']
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'error': 'Database tidak tersedia', 'valid': False}), 500
+    
+    try:
+        cursor = get_db_cursor(conn, dictionary=True)
+        cursor.execute("SELECT password FROM admin WHERE id = %s", (admin_id,))
+        admin = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not admin:
+            return jsonify({'error': 'Admin tidak ditemukan', 'valid': False}), 404
+        
+        if verify_password(password, admin['password']):
+            return jsonify({'valid': True, 'message': 'Password valid'}), 200
+        else:
+            return jsonify({'valid': False, 'error': 'Password salah'}), 401
+            
+    except Exception as e:
+        logger.error(f"Error in verify_password: {e}")
+        if conn:
+            conn.close()
+        return jsonify({'error': str(e), 'valid': False}), 500
+
 @app.route('/api/admin-profile', methods=['GET', 'OPTIONS'])
 @api_key_required
 @token_required
