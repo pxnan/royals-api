@@ -192,17 +192,6 @@
         <span style="color: #60a5fa;">📌 Semua endpoint menggunakan prefix <code>/api</code></span>
     </div>
 
-    <div class="note info">
-        <strong>🔄 Perubahan Terbaru:</strong>
-        <ul style="margin-left: 20px; margin-top: 5px;">
-            <li>✅ Sistem role <strong>dihapus</strong> - semua admin memiliki hak yang sama</li>
-            <li>✅ Admin hanya bisa <strong>mengedit & reset password akun sendiri</strong></li>
-            <li>✅ Admin bisa <strong>melihat semua admin & menambah admin baru</strong></li>
-            <li>✅ Admin bisa <strong>menghapus admin lain</strong> dengan verifikasi password</li>
-            <li>✅ Endpoint <code>/api/verify-admin-password</code> untuk verifikasi sebelum hapus</li>
-        </ul>
-    </div>
-
     <div class="note">
         <strong>📌 Catatan Penting Autentikasi:</strong>
         <ul style="margin-left: 20px; margin-top: 5px;">
@@ -276,7 +265,7 @@
                 <span class="badge badge-apikey-token">API Key + Bearer Token</span>
             </div>
 
-            <h3>6. Verifikasi Password Admin (butuh API Key + Token) <span class="badge badge-warning">NEW!</span></h3>
+            <h3>6. Verifikasi Password Admin (butuh API Key + Token)</h3>
             <div class="endpoint">
                 <span class="method method-post">POST</span>
                 <span class="url">/api/verify-admin-password</span>
@@ -365,18 +354,6 @@
     <div id="admin">
         <h2>👥 Admin Management</h2>
         <div class="section">
-            <div class="note info">
-                <strong>📋 Aturan Akses Admin:</strong>
-                <ul style="margin-left: 20px; margin-top: 5px;">
-                    <li>✅ <strong>Melihat semua admin</strong> - Semua admin bisa melihat daftar admin</li>
-                    <li>✅ <strong>Menambah admin baru</strong> - Semua admin bisa menambah admin</li>
-                    <li>✅ <strong>Mengedit akun sendiri</strong> - Admin hanya bisa edit akun sendiri</li>
-                    <li>✅ <strong>Reset password sendiri</strong> - Admin hanya bisa reset password sendiri</li>
-                    <li>✅ <strong>Menghapus admin lain</strong> - Admin bisa hapus admin lain (dengan verifikasi password)</li>
-                    <li>❌ <strong>Tidak bisa menghapus akun sendiri</strong> - Dilarang</li>
-                </ul>
-            </div>
-
             <h3>1. Daftar Semua Admin (pagination & search)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
@@ -508,11 +485,6 @@
         <h2>❓ Pertanyaan Tidak Dikenali</h2>
         <div class="section">
             <p>Semua endpoint unknown memerlukan API Key.</p>
-            
-            <div class="note warning">
-                <strong>⚠️ Perubahan:</strong> Pagination di <code>/api/pertanyaan-unknown</code> menggunakan <strong>10 data per halaman</strong> (fixed).
-            </div>
-
             <h3>1. Daftar Unknown Questions (pagination)</h3>
             <div class="endpoint">
                 <span class="method method-get">GET</span>
@@ -548,9 +520,6 @@
     <div id="training">
         <h2>🤖 Training Model & Informasi</h2>
         <div class="section">
-            <div class="note">
-                ⚠️ Pada lingkungan serverless (Vercel), training dibatasi waktu. Gunakan dataset kecil atau training lokal.
-            </div>
             <div class="note">
                 💾 Model disimpan ke <strong>Supabase Storage</strong> (bucket "models") setelah training.
             </div>
