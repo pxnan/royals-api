@@ -311,6 +311,58 @@ def save_unknown_question(question):
             logger.error(f"Save unknown error: {e}")
     else:
         logger.info(f"Unknown question (not saved): {question}")
+        
+# ==================== DAFTAR KATA KASAR (PROFANITY) ====================
+BAD_WORDS = [
+    # Indonesia umum
+    "anjing", "babi", "kontol", "memek", "jembut", "tai", "goblok", "bodoh",
+    "tolol", "idiot", "sialan", "brengsek", "bangsat", "kampret", "kampang",
+    "keparat", "ngentot", "ngewe", "setan", "iblis", "ngaco",
+    # Jawa
+    "asu", "asw", "jancuk", "jancok", "diancuk", "cuk", "cok", "ndasmu", "matamu", "bajingan",
+    "tempek", "tempik", "perek", "gendeng", "edan", "gemblung", "dongo", "kebo", "kodok",
+    # Sunda
+    "bangsad", "belog", "torog", "kohok", "teu", "aing", "dare", "bebek", "haseum",
+    # Batak
+    "bodat", "begu", "haporason", "jabud", "baito", "lappang", "sihit", "sipinggan",
+    # Minang
+    "indak", "karuah", "kawa", "taku", "cuak", "bajang",
+    # Bugis/Makassar
+    "pate", "lokka", "bangkeng", "curang",
+    # Maluku
+    "pukul", "fufu", "sale",
+    # Papua
+    "bangke", "kuskus",
+    # Inggris
+    "fuck", "shit", "bitch", "asshole", "bastard", "dick", "pussy", "cunt",
+    "whore", "slut", "motherfucker", "damn", "hell", "stupid", "moron",
+    # Variasi typo
+    "kont*l", "kont0l", "k0nt0l", "m3m3k", "mem3k", "anj1ng", "4nj1ng", "b4b1", "b4bi",
+    "gobl0k", "b0d0h", "ancuk", "janc0k"
+]
+BAD_WORDS = list(set(BAD_WORDS))
+
+# Variasi respon peringatan
+PROFANITY_RESPONSES = [
+    "Maaf, pertanyaan Anda mengandung kata-kata yang tidak pantas. Harap ajukan pertanyaan dengan sopan. Penggunaan kata kasar tidak akan dilayani dan tidak akan disimpan.",
+    "Kami tidak dapat memproses pertanyaan yang mengandung kata kasar. Silakan ajukan pertanyaan dengan bahasa yang baik dan benar. Terima kasih.",
+    "Mohon untuk tidak menggunakan kata-kata kasar. Chatbot ini dirancang untuk membantu dengan ramah. Ulangi pertanyaan Anda dengan sopan.",
+    "Pertanyaan Anda mengandung kata tidak pantas. Sebagai bentuk edukasi, tohindari kata kasar agar percakapan tetap nyaman. Silakan coba lagi.",
+    "Kata kasar terdeteksi. Kami tidak akan menyimpan pertanyaan ini. Harap gunakan bahasa yang santun."
+]
+
+def get_profanity_response():
+    import random
+    return random.choice(PROFANITY_RESPONSES)
+
+def contains_profanity(text):
+    if not text:
+        return False
+    text_lower = text.lower()
+    for word in BAD_WORDS:
+        if word in text_lower:
+            return True
+    return False
 
 # ==================== ENDPOINTS =====================
 @app.route('/')
@@ -326,10 +378,21 @@ def health():
 def chat():
     if request.method == 'OPTIONS':
         return '', 200
+    
     user_input = request.json.get('pertanyaan', '')
     if not user_input:
         return jsonify({'error': 'Pertanyaan kosong'}), 400
 
+    # ==================== CEK KATA KASAR ====================
+    if contains_profanity(user_input):
+        return jsonify({
+            'pertanyaan': user_input,
+            'jawaban': get_profanity_response(),
+            'status': 'error',
+            'recommendation_type': 'random'
+        }), 200
+
+    # ==================== LOAD MODEL DAN DATA ====================
     load_models_and_data()
 
     if model_qa is None or vectorizer_qa is None:
@@ -366,6 +429,7 @@ def chat():
     top_scores = scores[top_indices]
     max_score = top_scores[0]
 
+    # Kasus skor terlalu rendah -> unknown
     if max_score < -0.8:
         save_unknown_question(user_input)
         return jsonify({
@@ -374,6 +438,8 @@ def chat():
             'status': 'unknown',
             'recommendation_type': 'random'
         })
+
+    # Kasus ambigu (dua skor tertinggi terlalu dekat)
     elif len(top_scores) > 1 and abs(top_scores[0] - top_scores[1]) < 0.1:
         user_input_clean = user_input.lower().strip()
         exact_match_idx = -1
@@ -381,6 +447,8 @@ def chat():
             if user_input_clean == pertanyaan.lower().strip():
                 exact_match_idx = idx
                 break
+
+        # Jika exact match, langsung jawab
         if exact_match_idx >= 0:
             return jsonify({
                 'pertanyaan': user_input,
@@ -388,6 +456,8 @@ def chat():
                 'status': 'ok',
                 'kategori': kategori_list[exact_match_idx] if kategori_list else None
             })
+
+        # Jika tidak exact match, berikan opsi ambigu
         similar_questions = [pertanyaan_list[i] for i in top_indices if i < len(pertanyaan_list)]
         return jsonify({
             'pertanyaan': user_input,
@@ -396,6 +466,8 @@ def chat():
             'status': 'ambigu',
             'recommendation_type': 'random'
         })
+
+    # Kasus normal (prediksi tunggal)
     else:
         predicted_index = model_qa.predict(X_input_qa)[0]
         if 0 <= predicted_index < len(answers):
@@ -405,6 +477,7 @@ def chat():
             save_unknown_question(user_input)
             predicted_answer = "Mohon maaf, saya belum mengerti pertanyaan Anda."
             predicted_kategori = None
+
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': predicted_answer,
@@ -415,17 +488,21 @@ def chat():
 @app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
 @api_key_required
 def handle_ambiguous_unknown():
-    """Endpoint untuk menangani ketika user memilih 'pertanyaan saya tidak ada' pada opsi ambigu"""
     if request.method == 'OPTIONS':
         return '', 200
     
     data = request.json or {}
     original_question = data.get('original_question', '').strip()
     
-    print(f"[DEBUG] Menerima permintaan ambiguous-unknown dengan pertanyaan: {original_question}")
-    
     if not original_question:
         return jsonify({'error': 'Pertanyaan asli tidak ditemukan'}), 400
+    
+    if contains_profanity(original_question):
+        return jsonify({
+            'status': 'error',
+            'jawaban': get_profanity_response(),
+            'original_question': original_question
+        }), 200
     
     save_unknown_question(original_question)
     
