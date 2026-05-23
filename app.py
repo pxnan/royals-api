@@ -311,6 +311,54 @@ def save_unknown_question(question):
             logger.error(f"Save unknown error: {e}")
     else:
         logger.info(f"Unknown question (not saved): {question}")
+        
+# ==================== FUNGSI LOGGING PERTANYAAN ====================
+def log_question(pertanyaan, jawaban="", kategori="", status="ok", session_id=None):
+    """Mencatat pertanyaan user ke chat_logs dan update popular_questions"""
+    conn = get_db_connection()
+    if conn is None:
+        return
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Dapatkan IP address
+        ip_address = get_client_ip()
+        
+        # Insert ke chat_logs
+        cursor.execute("""
+            INSERT INTO chat_logs (pertanyaan, jawaban, kategori, status, session_id, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (pertanyaan, jawaban[:500] if jawaban else "", kategori, status, session_id, ip_address))
+        
+        # Update popular_questions (INSERT or UPDATE)
+        cursor.execute("""
+            INSERT INTO popular_questions (pertanyaan, kategori, frequency, last_asked)
+            VALUES (%s, %s, 1, NOW())
+            ON DUPLICATE KEY UPDATE 
+                frequency = frequency + 1,
+                last_asked = NOW()
+        """, (pertanyaan, kategori if kategori else "umum"))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error logging question: {e}")
+        if conn:
+            conn.close()
+
+
+def get_session_id():
+    """Mendapatkan atau membuat session ID dari cookie atau header"""
+    from flask import request
+    session_id = request.headers.get('X-Session-ID')
+    if not session_id:
+        session_id = request.cookies.get('session_id')
+    if not session_id:
+        import uuid
+        session_id = str(uuid.uuid4())
+    return session_id
 
 # ==================== ENDPOINTS =====================
 @app.route('/')
@@ -326,35 +374,50 @@ def health():
 def chat():
     if request.method == 'OPTIONS':
         return '', 200
+    
     user_input = request.json.get('pertanyaan', '')
     if not user_input:
         return jsonify({'error': 'Pertanyaan kosong'}), 400
 
+    # Load model dan data
     load_models_and_data()
 
+    # Jika model tidak tersedia
     if model_qa is None or vectorizer_qa is None:
         save_unknown_question(user_input)
+        
+        # Log pertanyaan
+        session_id = get_session_id()
+        log_question(user_input, "Maaf, model chatbot belum tersedia. Silakan latih model terlebih dahulu.", None, 'error', session_id)
+        
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Maaf, model chatbot belum tersedia. Silakan latih model terlebih dahulu.",
-            'status': 'error',
-            'recommendation_type': 'random'
+            'status': 'error'
         })
 
     from preprocessing import preprocess
     import numpy as np
+    
+    # Preprocessing input user
     processed_input = preprocess(user_input)
     X_input_qa = vectorizer_qa.transform([processed_input])
 
+    # Jika tidak ada kata yang dikenal setelah preprocessing
     if X_input_qa.nnz == 0:
         save_unknown_question(user_input)
+        
+        # Log pertanyaan unknown
+        session_id = get_session_id()
+        log_question(user_input, "Mohon maaf, saya belum mengerti pertanyaan Anda.", None, 'unknown', session_id)
+        
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown',
-            'recommendation_type': 'random'
+            'status': 'unknown'
         })
 
+    # Hitung skor similarity
     try:
         scores = model_qa.decision_function(X_input_qa)
         scores = scores.flatten() if len(scores.shape) > 1 else np.array(scores)
@@ -362,55 +425,100 @@ def chat():
         logger.error(f"Decision function error: {e}")
         scores = np.array([0])
 
+    # Ambil 3 skor tertinggi
     top_indices = np.argsort(scores)[::-1][:3]
     top_scores = scores[top_indices]
     max_score = top_scores[0]
 
+    # CASE 1: Skor terlalu rendah -> Unknown
     if max_score < -0.8:
         save_unknown_question(user_input)
+        
+        # Log pertanyaan unknown
+        session_id = get_session_id()
+        log_question(user_input, "Mohon maaf, saya belum mengerti pertanyaan Anda.", None, 'unknown', session_id)
+        
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown',
-            'recommendation_type': 'random'
+            'status': 'unknown'
         })
+    
+    # CASE 2: Skor ambigu (dua skor teratas terlalu dekat)
     elif len(top_scores) > 1 and abs(top_scores[0] - top_scores[1]) < 0.1:
         user_input_clean = user_input.lower().strip()
         exact_match_idx = -1
+        
+        # Cek apakah ada exact match
         for idx, pertanyaan in enumerate(pertanyaan_list):
             if user_input_clean == pertanyaan.lower().strip():
                 exact_match_idx = idx
                 break
+        
+        # Jika exact match, kirim jawaban langsung
         if exact_match_idx >= 0:
+            predicted_answer = answers[exact_match_idx]
+            predicted_kategori = kategori_list[exact_match_idx] if kategori_list else None
+            
+            # Log pertanyaan sukses (exact match)
+            session_id = get_session_id()
+            log_question(user_input, predicted_answer, predicted_kategori, 'ok', session_id)
+            
             return jsonify({
                 'pertanyaan': user_input,
-                'jawaban': answers[exact_match_idx],
+                'jawaban': predicted_answer,
                 'status': 'ok',
-                'kategori': kategori_list[exact_match_idx] if kategori_list else None
+                'kategori': predicted_kategori
             })
+        
+        # Jika tidak exact match, kirim opsi ambigu
         similar_questions = [pertanyaan_list[i] for i in top_indices if i < len(pertanyaan_list)]
+        
+        # Log pertanyaan ambigu
+        session_id = get_session_id()
+        log_question(user_input, "Pertanyaan mana yang kamu maksud?", None, 'ambigu', session_id)
+        
         return jsonify({
             'pertanyaan': user_input,
             'opsi_pertanyaan': similar_questions,
             'jawaban': "Pertanyaan mana yang kamu maksud?",
-            'status': 'ambigu',
-            'recommendation_type': 'random'
+            'status': 'ambigu'
         })
+    
+    # CASE 3: Prediksi normal
     else:
         predicted_index = model_qa.predict(X_input_qa)[0]
+        
         if 0 <= predicted_index < len(answers):
             predicted_answer = answers[predicted_index]
             predicted_kategori = kategori_list[predicted_index] if kategori_list else None
+            
+            # Log pertanyaan sukses
+            session_id = get_session_id()
+            log_question(user_input, predicted_answer, predicted_kategori, 'ok', session_id)
+            
+            return jsonify({
+                'pertanyaan': user_input,
+                'jawaban': predicted_answer,
+                'status': 'ok',
+                'kategori': predicted_kategori
+            })
         else:
+            # Fallback jika index tidak valid
             save_unknown_question(user_input)
             predicted_answer = "Mohon maaf, saya belum mengerti pertanyaan Anda."
             predicted_kategori = None
-        return jsonify({
-            'pertanyaan': user_input,
-            'jawaban': predicted_answer,
-            'status': 'ok',
-            'kategori': predicted_kategori
-        })
+            
+            # Log pertanyaan unknown
+            session_id = get_session_id()
+            log_question(user_input, predicted_answer, None, 'unknown', session_id)
+            
+            return jsonify({
+                'pertanyaan': user_input,
+                'jawaban': predicted_answer,
+                'status': 'unknown',
+                'kategori': predicted_kategori
+            })
 
 @app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
 @api_key_required
@@ -434,6 +542,145 @@ def handle_ambiguous_unknown():
         'jawaban': 'Mohon maaf, saya belum mengerti pertanyaan Anda. Pertanyaan Anda telah saya catat untuk pembelajaran ke depannya.',
         'original_question': original_question
     }), 200
+
+# ==================== REKOMENDASI POPULER ====================
+@app.route('/api/recommendations/popular', methods=['GET', 'OPTIONS'])
+@api_key_required
+def get_popular_recommendations():
+    """Mengambil pertanyaan paling populer dari log"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    kategori = request.args.get('kategori', '')
+    limit = request.args.get('limit', 3, type=int)
+    
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'error': 'Database tidak tersedia'}), 500
+    
+    try:
+        cursor = get_db_cursor(conn, dictionary=True)
+        recommendations = []
+        
+        if kategori and kategori != 'umum':
+            # Ambil pertanyaan populer berdasarkan kategori
+            cursor.execute("""
+                SELECT pertanyaan, frequency 
+                FROM popular_questions 
+                WHERE kategori = %s 
+                ORDER BY frequency DESC 
+                LIMIT %s
+            """, (kategori, limit))
+        else:
+            # Ambil pertanyaan populer secara global (tanpa kategori tertentu)
+            cursor.execute("""
+                SELECT pertanyaan, frequency 
+                FROM popular_questions 
+                WHERE kategori != 'umum'
+                ORDER BY frequency DESC 
+                LIMIT %s
+            """, (limit,))
+        
+        rows = cursor.fetchall()
+        recommendations = [row['pertanyaan'] for row in rows]
+        
+        # Fallback: jika belum ada data populer, ambil dari dataset (prioritas is_popular=1)
+        if len(recommendations) < limit:
+            remaining = limit - len(recommendations)
+            
+            # Coba ambil dari dataset yang ditandai popular
+            cursor.execute("""
+                SELECT pertanyaan FROM dataset 
+                WHERE is_popular = 1 
+                ORDER BY RAND() 
+                LIMIT %s
+            """, (remaining,))
+            rows = cursor.fetchall()
+            popular_from_dataset = [row['pertanyaan'] for row in rows]
+            recommendations.extend(popular_from_dataset)
+            
+            remaining = limit - len(recommendations)
+            
+            # Jika masih kurang, ambil random
+            if remaining > 0:
+                cursor.execute("""
+                    SELECT pertanyaan FROM dataset 
+                    ORDER BY RAND() 
+                    LIMIT %s
+                """, (remaining,))
+                rows = cursor.fetchall()
+                random_fallback = [row['pertanyaan'] for row in rows]
+                recommendations.extend(random_fallback)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'recommendations': recommendations[:limit],
+            'source': 'popular' if len([r for r in rows if r]) else 'fallback'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_popular_recommendations: {e}")
+        if conn:
+            conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/recommendations/popular-by-category', methods=['GET', 'OPTIONS'])
+@api_key_required
+def get_popular_by_category():
+    """Mengambil pertanyaan populer berdasarkan kategori"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    kategori = request.args.get('kategori', '')
+    limit = request.args.get('limit', 3, type=int)
+    
+    if not kategori:
+        return jsonify({'error': 'Parameter kategori diperlukan'}), 400
+    
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'error': 'Database tidak tersedia'}), 500
+    
+    try:
+        cursor = get_db_cursor(conn, dictionary=True)
+        
+        # Ambil dari popular_questions berdasarkan kategori
+        cursor.execute("""
+            SELECT pertanyaan, frequency 
+            FROM popular_questions 
+            WHERE kategori = %s 
+            ORDER BY frequency DESC 
+            LIMIT %s
+        """, (kategori, limit))
+        
+        rows = cursor.fetchall()
+        recommendations = [row['pertanyaan'] for row in rows]
+        
+        # Fallback ke dataset jika kurang
+        if len(recommendations) < limit:
+            remaining = limit - len(recommendations)
+            cursor.execute("""
+                SELECT pertanyaan FROM dataset 
+                WHERE kategori = %s 
+                ORDER BY RAND() 
+                LIMIT %s
+            """, (kategori, remaining))
+            rows = cursor.fetchall()
+            recommendations.extend([row['pertanyaan'] for row in rows])
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'recommendations': recommendations}), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_popular_by_category: {e}")
+        if conn:
+            conn.close()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/recommendations/random', methods=['GET', 'OPTIONS'])
 @api_key_required
@@ -476,31 +723,31 @@ def get_random_recommendations():
 #         logger.error(f"Error in get_recommendations: {e}")
 #         return jsonify({'error': str(e)}), 500
     
-@app.route('/api/recommendations/by-category', methods=['GET', 'OPTIONS'])
-@api_key_required
-def get_recommendations_by_category():
-    if request.method == 'OPTIONS':
-        return '', 200
-    kategori = request.args.get('kategori')
-    if not kategori:
-        return jsonify({'error': 'Parameter kategori diperlukan'}), 400
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database tidak tersedia'}), 500
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT pertanyaan FROM dataset WHERE kategori = %s ORDER BY RAND() LIMIT 3",
-            (kategori,)
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        recommendations = [row[0] for row in rows]
-        return jsonify({'recommendations': recommendations}), 200
-    except Exception as e:
-        logger.error(f"Error in recommendations by category: {e}")
-        return jsonify({'error': str(e)}), 500
+# @app.route('/api/recommendations/by-category', methods=['GET', 'OPTIONS'])
+# @api_key_required
+# def get_recommendations_by_category():
+#     if request.method == 'OPTIONS':
+#         return '', 200
+#     kategori = request.args.get('kategori')
+#     if not kategori:
+#         return jsonify({'error': 'Parameter kategori diperlukan'}), 400
+#     try:
+#         conn = get_db_connection()
+#         if conn is None:
+#             return jsonify({'error': 'Database tidak tersedia'}), 500
+#         cursor = conn.cursor()
+#         cursor.execute(
+#             "SELECT pertanyaan FROM dataset WHERE kategori = %s ORDER BY RAND() LIMIT 3",
+#             (kategori,)
+#         )
+#         rows = cursor.fetchall()
+#         cursor.close()
+#         conn.close()
+#         recommendations = [row[0] for row in rows]
+#         return jsonify({'recommendations': recommendations}), 200
+#     except Exception as e:
+#         logger.error(f"Error in recommendations by category: {e}")
+#         return jsonify({'error': str(e)}), 500
 
 # ==================== AUTHENTICATION ====================
 @app.route('/api/login', methods=['POST', 'OPTIONS'])
