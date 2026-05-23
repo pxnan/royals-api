@@ -18,7 +18,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 import pickle
 from preprocessing import preprocess
-from supabase import create_client, Client
+from supabase import create_client, Client  # type: ignore
 
 # Load environment variables
 load_dotenv()
