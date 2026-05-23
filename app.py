@@ -337,7 +337,8 @@ def chat():
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Maaf, model chatbot belum tersedia. Silakan latih model terlebih dahulu.",
-            'status': 'error'
+            'status': 'error',
+            'recommendation_type': 'random'
         })
 
     from preprocessing import preprocess
@@ -350,7 +351,8 @@ def chat():
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown'
+            'status': 'unknown',
+            'recommendation_type': 'random'
         })
 
     try:
@@ -369,7 +371,8 @@ def chat():
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown'
+            'status': 'unknown',
+            'recommendation_type': 'random'
         })
     elif len(top_scores) > 1 and abs(top_scores[0] - top_scores[1]) < 0.1:
         user_input_clean = user_input.lower().strip()
@@ -390,7 +393,8 @@ def chat():
             'pertanyaan': user_input,
             'opsi_pertanyaan': similar_questions,
             'jawaban': "Pertanyaan mana yang kamu maksud?",
-            'status': 'ambigu'
+            'status': 'ambigu',
+            'recommendation_type': 'random'
         })
     else:
         predicted_index = model_qa.predict(X_input_qa)[0]
@@ -431,9 +435,10 @@ def handle_ambiguous_unknown():
         'original_question': original_question
     }), 200
 
-@app.route('/api/recommendations', methods=['GET', 'OPTIONS'])
+@app.route('/api/recommendations/random', methods=['GET', 'OPTIONS'])
 @api_key_required
-def get_recommendations():
+def get_random_recommendations():
+    """Mengambil 3 pertanyaan random dari dataset"""
     if request.method == 'OPTIONS':
         return '', 200
     try:
@@ -448,8 +453,28 @@ def get_recommendations():
         recommendations = [row[0] for row in rows]
         return jsonify({'recommendations': recommendations}), 200
     except Exception as e:
-        logger.error(f"Error in get_recommendations: {e}")
+        logger.error(f"Error in get_random_recommendations: {e}")
         return jsonify({'error': str(e)}), 500
+
+# @app.route('/api/recommendations', methods=['GET', 'OPTIONS'])
+# @api_key_required
+# def get_recommendations():
+#     if request.method == 'OPTIONS':
+#         return '', 200
+#     try:
+#         conn = get_db_connection()
+#         if conn is None:
+#             return jsonify({'error': 'Database tidak tersedia'}), 500
+#         cursor = conn.cursor()
+#         cursor.execute("SELECT pertanyaan FROM dataset ORDER BY RAND() LIMIT 3")
+#         rows = cursor.fetchall()
+#         cursor.close()
+#         conn.close()
+#         recommendations = [row[0] for row in rows]
+#         return jsonify({'recommendations': recommendations}), 200
+#     except Exception as e:
+#         logger.error(f"Error in get_recommendations: {e}")
+#         return jsonify({'error': str(e)}), 500
     
 @app.route('/api/recommendations/by-category', methods=['GET', 'OPTIONS'])
 @api_key_required
