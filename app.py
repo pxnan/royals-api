@@ -330,7 +330,7 @@ BAD_WORDS = [
     # Bugis/Makassar
     "pate", "lokka", "bangkeng", "curang",
     # Maluku
-    "pukul", "fufu", "sale",
+    "pukul", "fufu", "sale", "puki", "kolot", "sogo", "bampuki", "pepek","kimai", "cuki", "kudacuki", "kuda cuki", "cukimai", "bampukar",
     # Papua
     "bangke", "kuskus",
     # Inggris
