@@ -547,7 +547,6 @@ def handle_ambiguous_unknown():
 @app.route('/api/recommendations/popular', methods=['GET', 'OPTIONS'])
 @api_key_required
 def get_popular_recommendations():
-    """Mengambil pertanyaan paling populer dari log"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -563,7 +562,7 @@ def get_popular_recommendations():
         recommendations = []
         
         if kategori and kategori != 'umum':
-            # Ambil pertanyaan populer berdasarkan kategori
+            # 1. Prioritas dari popular_questions berdasarkan kategori
             cursor.execute("""
                 SELECT pertanyaan, frequency 
                 FROM popular_questions 
@@ -571,53 +570,60 @@ def get_popular_recommendations():
                 ORDER BY frequency DESC 
                 LIMIT %s
             """, (kategori, limit))
+            rows = cursor.fetchall()
+            recommendations = [row['pertanyaan'] for row in rows]
+            
+            # 2. Jika kurang, ambil dari dataset yang is_popular=1
+            if len(recommendations) < limit:
+                remaining = limit - len(recommendations)
+                cursor.execute("""
+                    SELECT pertanyaan FROM dataset 
+                    WHERE is_popular = 1 AND kategori = %s
+                    ORDER BY RAND()
+                    LIMIT %s
+                """, (kategori, remaining))
+                rows = cursor.fetchall()
+                recommendations.extend([row['pertanyaan'] for row in rows])
         else:
-            # Ambil pertanyaan populer secara global (tanpa kategori tertentu)
+            # 1. Prioritas dari popular_questions global
             cursor.execute("""
                 SELECT pertanyaan, frequency 
                 FROM popular_questions 
-                WHERE kategori != 'umum'
                 ORDER BY frequency DESC 
                 LIMIT %s
             """, (limit,))
+            rows = cursor.fetchall()
+            recommendations = [row['pertanyaan'] for row in rows]
+            
+            # 2. Jika kurang, ambil dari dataset yang is_popular=1
+            if len(recommendations) < limit:
+                remaining = limit - len(recommendations)
+                cursor.execute("""
+                    SELECT pertanyaan FROM dataset 
+                    WHERE is_popular = 1 
+                    ORDER BY RAND()
+                    LIMIT %s
+                """, (remaining,))
+                rows = cursor.fetchall()
+                recommendations.extend([row['pertanyaan'] for row in rows])
         
-        rows = cursor.fetchall()
-        recommendations = [row['pertanyaan'] for row in rows]
-        
-        # Fallback: jika belum ada data populer, ambil dari dataset (prioritas is_popular=1)
+        # 3. Jika masih kurang, ambil random dari dataset
         if len(recommendations) < limit:
             remaining = limit - len(recommendations)
-            
-            # Coba ambil dari dataset yang ditandai popular
             cursor.execute("""
                 SELECT pertanyaan FROM dataset 
-                WHERE is_popular = 1 
                 ORDER BY RAND() 
                 LIMIT %s
             """, (remaining,))
             rows = cursor.fetchall()
-            popular_from_dataset = [row['pertanyaan'] for row in rows]
-            recommendations.extend(popular_from_dataset)
-            
-            remaining = limit - len(recommendations)
-            
-            # Jika masih kurang, ambil random
-            if remaining > 0:
-                cursor.execute("""
-                    SELECT pertanyaan FROM dataset 
-                    ORDER BY RAND() 
-                    LIMIT %s
-                """, (remaining,))
-                rows = cursor.fetchall()
-                random_fallback = [row['pertanyaan'] for row in rows]
-                recommendations.extend(random_fallback)
+            recommendations.extend([row['pertanyaan'] for row in rows])
         
         cursor.close()
         conn.close()
         
         return jsonify({
             'recommendations': recommendations[:limit],
-            'source': 'popular' if len([r for r in rows if r]) else 'fallback'
+            'source': 'popular'
         }), 200
         
     except Exception as e:
