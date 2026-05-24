@@ -540,7 +540,7 @@ def chat():
         save_unknown_question(user_input)
         return jsonify({
             'pertanyaan': user_input,
-            'jawaban': "Mohon maaf, kategori pertanyaan tidak ditemukan.",
+            'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
             'status': 'unknown'
         }), 200
 
