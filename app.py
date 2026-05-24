@@ -319,7 +319,7 @@ BAD_WORDS = [
     "tolol", "idiot", "sialan", "brengsek", "bangsat", "kampret", "kampang",
     "keparat", "ngentot", "ngewe", "setan", "iblis", "ngaco",
     # Jawa
-    "asu", "asw", "jancuk", "jancok", "diancuk", "cuk", "cok", "ndasmu", "matamu", "bajingan",
+    "asu", "asw", "jancuk", "jancok", "diancuk", "cuk", "ndasmu", "matamu", "bajingan",
     "tempek", "tempik", "perek", "gendeng", "edan", "gemblung", "dongo", "kebo", "kodok",
     # Sunda
     "bangsad", "belog", "torog", "kohok", "teu", "aing", "dare", "bebek", "haseum",
@@ -373,6 +373,118 @@ def index():
 def health():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
+# @app.route('/api/chat', methods=['POST', 'OPTIONS'])
+# @api_key_required
+# def chat():
+#     if request.method == 'OPTIONS':
+#         return '', 200
+    
+#     user_input = request.json.get('pertanyaan', '')
+#     if not user_input:
+#         return jsonify({'error': 'Pertanyaan kosong'}), 400
+
+#     # ==================== CEK KATA KASAR ====================
+#     if contains_profanity(user_input):
+#         return jsonify({
+#             'pertanyaan': user_input,
+#             'jawaban': get_profanity_response(),
+#             'status': 'error',
+#             'recommendation_type': 'random'
+#         }), 200
+
+#     # ==================== LOAD MODEL DAN DATA ====================
+#     load_models_and_data()
+
+#     if model_qa is None or vectorizer_qa is None:
+#         save_unknown_question(user_input)
+#         return jsonify({
+#             'pertanyaan': user_input,
+#             'jawaban': "Maaf, model chatbot belum tersedia. Silakan latih model terlebih dahulu.",
+#             'status': 'error',
+#             'recommendation_type': 'random'
+#         })
+
+#     from preprocessing import preprocess
+#     import numpy as np
+#     processed_input = preprocess(user_input)
+#     X_input_qa = vectorizer_qa.transform([processed_input])
+
+#     if X_input_qa.nnz == 0:
+#         save_unknown_question(user_input)
+#         return jsonify({
+#             'pertanyaan': user_input,
+#             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
+#             'status': 'unknown',
+#             'recommendation_type': 'random'
+#         })
+
+#     try:
+#         scores = model_qa.decision_function(X_input_qa)
+#         scores = scores.flatten() if len(scores.shape) > 1 else np.array(scores)
+#     except Exception as e:
+#         logger.error(f"Decision function error: {e}")
+#         scores = np.array([0])
+
+#     top_indices = np.argsort(scores)[::-1][:3]
+#     top_scores = scores[top_indices]
+#     max_score = top_scores[0]
+
+#     # Kasus skor terlalu rendah -> unknown
+#     if max_score < -0.8:
+#         save_unknown_question(user_input)
+#         return jsonify({
+#             'pertanyaan': user_input,
+#             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
+#             'status': 'unknown',
+#             'recommendation_type': 'random'
+#         })
+
+#     # Kasus ambigu (dua skor tertinggi terlalu dekat)
+#     elif len(top_scores) > 1 and abs(top_scores[0] - top_scores[1]) < 0.1:
+#         user_input_clean = user_input.lower().strip()
+#         exact_match_idx = -1
+#         for idx, pertanyaan in enumerate(pertanyaan_list):
+#             if user_input_clean == pertanyaan.lower().strip():
+#                 exact_match_idx = idx
+#                 break
+
+#         # Jika exact match, langsung jawab
+#         if exact_match_idx >= 0:
+#             return jsonify({
+#                 'pertanyaan': user_input,
+#                 'jawaban': answers[exact_match_idx],
+#                 'status': 'ok',
+#                 'kategori': kategori_list[exact_match_idx] if kategori_list else None
+#             })
+
+#         # Jika tidak exact match, berikan opsi ambigu
+#         similar_questions = [pertanyaan_list[i] for i in top_indices if i < len(pertanyaan_list)]
+#         return jsonify({
+#             'pertanyaan': user_input,
+#             'opsi_pertanyaan': similar_questions,
+#             'jawaban': "Pertanyaan mana yang kamu maksud?",
+#             'status': 'ambigu',
+#             'recommendation_type': 'random'
+#         })
+
+#     # Kasus normal (prediksi tunggal)
+#     else:
+#         predicted_index = model_qa.predict(X_input_qa)[0]
+#         if 0 <= predicted_index < len(answers):
+#             predicted_answer = answers[predicted_index]
+#             predicted_kategori = kategori_list[predicted_index] if kategori_list else None
+#         else:
+#             save_unknown_question(user_input)
+#             predicted_answer = "Mohon maaf, saya belum mengerti pertanyaan Anda."
+#             predicted_kategori = None
+
+#         return jsonify({
+#             'pertanyaan': user_input,
+#             'jawaban': predicted_answer,
+#             'status': 'ok',
+#             'kategori': predicted_kategori
+#         })
+
 @app.route('/api/chat', methods=['POST', 'OPTIONS'])
 @api_key_required
 def chat():
@@ -383,82 +495,102 @@ def chat():
     if not user_input:
         return jsonify({'error': 'Pertanyaan kosong'}), 400
 
-    # ==================== CEK KATA KASAR ====================
+    # 1. Proteksi Kata Kasar
     if contains_profanity(user_input):
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': get_profanity_response(),
-            'status': 'error',
-            'recommendation_type': 'random'
+            'status': 'error'
         }), 200
 
-    # ==================== LOAD MODEL DAN DATA ====================
+    # 2. Load Model & Pastikan Data Tersedia
     load_models_and_data()
-
     if model_qa is None or vectorizer_qa is None:
-        save_unknown_question(user_input)
-        return jsonify({
-            'pertanyaan': user_input,
-            'jawaban': "Maaf, model chatbot belum tersedia. Silakan latih model terlebih dahulu.",
-            'status': 'error',
-            'recommendation_type': 'random'
-        })
+        return jsonify({'error': 'Model belum siap, lakukan training terlebih dahulu.'}), 500
 
+    # 3. Preprocessing & Transform Input User ke TF-IDF
     from preprocessing import preprocess
     import numpy as np
+    
     processed_input = preprocess(user_input)
-    X_input_qa = vectorizer_qa.transform([processed_input])
+    X_input_tfidf = vectorizer_qa.transform([processed_input])
 
-    if X_input_qa.nnz == 0:
+    # Jika kata kunci tidak ada sama sekali di kamus TF-IDF
+    if X_input_tfidf.nnz == 0:
         save_unknown_question(user_input)
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown',
-            'recommendation_type': 'random'
-        })
+            'status': 'unknown'
+        }), 200
 
-    try:
-        scores = model_qa.decision_function(X_input_qa)
-        scores = scores.flatten() if len(scores.shape) > 1 else np.array(scores)
-    except Exception as e:
-        logger.error(f"Decision function error: {e}")
-        scores = np.array([0])
+    # 4. PREDIKSI KATEGORI MENGGUNAKAN LINEAR SVM
+    predicted_category = model_qa.predict(X_input_tfidf)[0]
 
-    top_indices = np.argsort(scores)[::-1][:3]
-    top_scores = scores[top_indices]
-    max_score = top_scores[0]
+    # 5. PENCOCOKAN JAWABAN SPESIFIK (Mencari dokumen terdekat di dalam kategori terpilih)
+    X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
+    
+    # Menghitung skor prediksi kecocokan setiap jawaban via perkalian matriks
+    predict_answer_score = (X_input_tfidf * X_all_questions_tfidf.T).toarray().flatten()
 
-    # Kasus skor terlalu rendah -> unknown
-    if max_score < -0.8:
+    # Kumpulkan semua dokumen yang berada di bawah kategori hasil prediksi SVM
+    category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
+
+    if not category_indices:
+        save_unknown_question(user_input)
+        return jsonify({
+            'pertanyaan': user_input,
+            'jawaban': "Mohon maaf, kategori pertanyaan tidak ditemukan.",
+            'status': 'unknown'
+        }), 200
+
+    # Urutkan indeks berdasarkan skor prediksi jawaban tertinggi khusus di kategori tersebut
+    sorted_category_indices = sorted(category_indices, key=lambda idx: predict_answer_score[idx], reverse=True)
+    
+    # Ambil 3 peringkat teratas beserta skornya
+    top_indices = sorted_category_indices[:3]
+    top_scores = [predict_answer_score[i] for i in top_indices]
+    
+    max_predict_score = top_scores[0]
+
+    # DETEKSI AMBIGU & THRESHOLD KETAT
+    # KASUS 1: Jika skor prediksi tertinggi masih di bawah ambang batas dasar
+    if max_predict_score < 0.15:
         save_unknown_question(user_input)
         return jsonify({
             'pertanyaan': user_input,
             'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown',
-            'recommendation_type': 'random'
-        })
+            'status': 'unknown'
+        }), 200
 
-    # Kasus ambigu (dua skor tertinggi terlalu dekat)
-    elif len(top_scores) > 1 and abs(top_scores[0] - top_scores[1]) < 0.1:
+    # KASUS 2: DETEKSI AMBIGU
+    is_ambiguous = False
+    if len(top_scores) > 1:
+        score_gap = abs(top_scores[0] - top_scores[1])
+        if max_predict_score < 0.55 and score_gap < 0.08:
+            is_ambiguous = True
+
+    if is_ambiguous:
         user_input_clean = user_input.lower().strip()
         exact_match_idx = -1
-        for idx, pertanyaan in enumerate(pertanyaan_list):
-            if user_input_clean == pertanyaan.lower().strip():
+        
+        # Pengecekan Exact Match
+        for idx in top_indices:
+            if user_input_clean == pertanyaan_list[idx].lower().strip():
                 exact_match_idx = idx
                 break
 
-        # Jika exact match, langsung jawab
+        # Jika ada exact match, batalkan ambigu, langsung berikan jawabannya
         if exact_match_idx >= 0:
             return jsonify({
                 'pertanyaan': user_input,
                 'jawaban': answers[exact_match_idx],
                 'status': 'ok',
-                'kategori': kategori_list[exact_match_idx] if kategori_list else None
+                'kategori': predicted_category
             })
 
-        # Jika tidak exact match, berikan opsi ambigu
-        similar_questions = [pertanyaan_list[i] for i in top_indices if i < len(pertanyaan_list)]
+        # Tampilkan opsi rekomendasi pertanyaan yang mirip
+        similar_questions = [pertanyaan_list[i] for i in top_indices]
         return jsonify({
             'pertanyaan': user_input,
             'opsi_pertanyaan': similar_questions,
@@ -467,23 +599,16 @@ def chat():
             'recommendation_type': 'random'
         })
 
-    # Kasus normal (prediksi tunggal)
+    # KASUS 3: NORMAL (Satu jawaban spesifik terprediksi dengan yakin)
     else:
-        predicted_index = model_qa.predict(X_input_qa)[0]
-        if 0 <= predicted_index < len(answers):
-            predicted_answer = answers[predicted_index]
-            predicted_kategori = kategori_list[predicted_index] if kategori_list else None
-        else:
-            save_unknown_question(user_input)
-            predicted_answer = "Mohon maaf, saya belum mengerti pertanyaan Anda."
-            predicted_kategori = None
-
+        best_index = top_indices[0]
         return jsonify({
             'pertanyaan': user_input,
-            'jawaban': predicted_answer,
+            'jawaban': answers[best_index],
             'status': 'ok',
-            'kategori': predicted_kategori
-        })
+            'kategori': predicted_category,
+            'confidence_score': float(max_predict_score) # Digunakan untuk kebutuhan visualisasi Bab 4
+        }), 200
 
 @app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
 @api_key_required
@@ -1474,6 +1599,87 @@ def delete_bulk_data():
     return jsonify({'error': 'Parameter "ids" atau "indices" diperlukan'}), 400
 
 # ==================== TRAINING MODEL ====================
+# @app.route('/api/train-model', methods=['POST', 'OPTIONS'])
+# @api_key_required
+# def train_model():
+#     if request.method == 'OPTIONS':
+#         return '', 200
+#     try:
+#         start_time = time.time()
+        
+#         conn = get_db_connection()
+#         if conn is None:
+#             return jsonify({'error': 'Database tidak tersedia'}), 500
+        
+#         cursor = get_db_cursor(conn, dictionary=True)
+#         cursor.execute("SELECT pertanyaan, jawaban, kategori FROM dataset ORDER BY id")
+#         rows = cursor.fetchall()
+#         cursor.close()
+#         conn.close()
+        
+#         if not rows:
+#             return jsonify({'error': 'Dataset kosong, tidak ada data untuk training'}), 400
+        
+#         pertanyaan_list_train = [row['pertanyaan'] for row in rows]
+#         jawaban_list_train = [row['jawaban'] for row in rows]
+#         kategori_list_train = [row['kategori'] for row in rows]
+        
+#         logger.info(f"[TRAIN] Total data: {len(pertanyaan_list_train)}")
+        
+#         from preprocessing import preprocess
+#         processed_list = [preprocess(q) for q in pertanyaan_list_train]
+        
+#         from sklearn.feature_extraction.text import TfidfVectorizer
+#         vectorizer = TfidfVectorizer()
+#         X_train_tfidf = vectorizer.fit_transform(processed_list)
+        
+#         from sklearn.svm import LinearSVC
+#         y_train = list(range(len(pertanyaan_list_train)))
+#         model = LinearSVC()
+#         model.fit(X_train_tfidf, y_train)
+        
+#         qa_data_new = {
+#             'model': model,
+#             'vectorizer': vectorizer,
+#             'answers': jawaban_list_train,
+#             'questions': pertanyaan_list_train,
+#             'categories': kategori_list_train
+#         }
+        
+#         supabase_saved = save_model_to_supabase(qa_data_new)
+        
+#         if not supabase_saved:
+#             logger.error("Failed to save model to Supabase")
+#             return jsonify({
+#                 'error': 'Gagal menyimpan model ke Supabase. Periksa konfigurasi Supabase.',
+#                 'status': 'error'
+#             }), 500
+        
+#         global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
+#         model_qa = model
+#         vectorizer_qa = vectorizer
+#         answers = jawaban_list_train
+#         pertanyaan_list = pertanyaan_list_train
+#         kategori_list = kategori_list_train
+        
+#         training_time = time.time() - start_time
+        
+#         return jsonify({
+#             'message': 'Model berhasil dilatih dan disimpan ke Supabase',
+#             'training_time': f'{training_time:.2f} detik',
+#             'total_data': len(pertanyaan_list_train),
+#             'total_questions': len(pertanyaan_list_train),
+#             'categories_count': len(set(kategori_list_train)),
+#             'status': 'success',
+#             'saved_to_supabase': True
+#         }), 200
+        
+#     except Exception as e:
+#         logger.error(f"Error in train_model: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'error': f'Terjadi kesalahan saat training: {str(e)}'}), 500
+
 @app.route('/api/train-model', methods=['POST', 'OPTIONS'])
 @api_key_required
 def train_model():
@@ -1482,6 +1688,7 @@ def train_model():
     try:
         start_time = time.time()
         
+        # 1. Ambil data dari database
         conn = get_db_connection()
         if conn is None:
             return jsonify({'error': 'Database tidak tersedia'}), 500
@@ -1493,26 +1700,30 @@ def train_model():
         conn.close()
         
         if not rows:
-            return jsonify({'error': 'Dataset kosong, tidak ada data untuk training'}), 400
+            return jsonify({'error': 'Dataset kosong'}), 400
         
         pertanyaan_list_train = [row['pertanyaan'] for row in rows]
         jawaban_list_train = [row['jawaban'] for row in rows]
         kategori_list_train = [row['kategori'] for row in rows]
         
-        logger.info(f"[TRAIN] Total data: {len(pertanyaan_list_train)}")
-        
+        # 2. Text Preprocessing
         from preprocessing import preprocess
-        processed_list = [preprocess(q) for q in pertanyaan_list_train]
+        processed_questions = [preprocess(q) for q in pertanyaan_list_train]
         
+        # 3. Ekstraksi Fitur TF-IDF (Menggunakan kombinasi Unigram & Bigram)
         from sklearn.feature_extraction.text import TfidfVectorizer
-        vectorizer = TfidfVectorizer()
-        X_train_tfidf = vectorizer.fit_transform(processed_list)
+        vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=2)
+        X_train_tfidf = vectorizer.fit_transform(processed_questions)
         
+        # 4. TARGET LABEL: Menggunakan 9 kategori aktual (Valid secara akademis)
+        y_train = kategori_list_train
+        
+        # 5. Pemodelan dengan Linear SVM (LinearSVC)
         from sklearn.svm import LinearSVC
-        y_train = list(range(len(pertanyaan_list_train)))
-        model = LinearSVC()
+        model = LinearSVC(C=1.0, random_state=42, max_iter=2000)
         model.fit(X_train_tfidf, y_train)
         
+        # 6. Bungkus semua data ke dictionary untuk disimpan ke Supabase
         qa_data_new = {
             'model': model,
             'vectorizer': vectorizer,
@@ -1522,14 +1733,10 @@ def train_model():
         }
         
         supabase_saved = save_model_to_supabase(qa_data_new)
-        
         if not supabase_saved:
-            logger.error("Failed to save model to Supabase")
-            return jsonify({
-                'error': 'Gagal menyimpan model ke Supabase. Periksa konfigurasi Supabase.',
-                'status': 'error'
-            }), 500
+            return jsonify({'error': 'Gagal menyimpan model ke Supabase'}), 500
         
+        # Update ke memori global aplikasi
         global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
         model_qa = model
         vectorizer_qa = vectorizer
@@ -1537,23 +1744,16 @@ def train_model():
         pertanyaan_list = pertanyaan_list_train
         kategori_list = kategori_list_train
         
-        training_time = time.time() - start_time
-        
         return jsonify({
-            'message': 'Model berhasil dilatih dan disimpan ke Supabase',
-            'training_time': f'{training_time:.2f} detik',
-            'total_data': len(pertanyaan_list_train),
-            'total_questions': len(pertanyaan_list_train),
-            'categories_count': len(set(kategori_list_train)),
             'status': 'success',
-            'saved_to_supabase': True
+            'message': 'Model Linear SVM berhasil dilatih berdasarkan 9 kategori',
+            'training_time': f'{time.time() - start_time:.2f} detik',
+            'total_data': len(pertanyaan_list_train)
         }), 200
         
     except Exception as e:
         logger.error(f"Error in train_model: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Terjadi kesalahan saat training: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
 
 # ==================== DEBUG ====================
 @app.route('/api/cek-csv', methods=['GET', 'OPTIONS'])
