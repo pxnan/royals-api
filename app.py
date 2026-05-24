@@ -68,8 +68,8 @@ kategori_list = []
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY) if SUPABASE_URL and SUPABASE_ANON_KEY else None
-BUCKET_NAME = "models"
-MODEL_FILE = "model_qa.pkl"
+BUCKET_NAME = os.getenv("BUCKET_NAME")
+MODEL_FILE = os.getenv("MODEL_FILE")
 
 
 # ===================== Handler OPTIONS =====================
