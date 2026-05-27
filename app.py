@@ -562,6 +562,114 @@ def chat():
         'confidence_score': float(max_predict_score)
     }), 200
         
+# @app.route('/api/chat-n8n-proxy', methods=['POST', 'OPTIONS'])
+# @api_key_required
+# def chat_n8n_proxy():
+#     if request.method == 'OPTIONS':
+#         return '', 200
+        
+#     data = request.json
+#     if not data or 'pertanyaan' not in data:
+#         return jsonify({'error': 'Pertanyaan tidak boleh kosong'}), 400
+
+#     user_input = data['pertanyaan']
+#     logger.info(f"[Hybrid AI] Memproses SVM Lokal -> Alibaba n8n untuk: {user_input}")
+
+#     # =========================================================================
+#     # SISI 1: LOGIKA SVM ASLI ANDA (PROSES LOKAL SECARA MANDIRI)
+#     # =========================================================================
+#     jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
+#     kategori_terdeteksi = "unknown"
+    
+#     # 1. Proteksi Kata Kasar
+#     if contains_profanity(user_input):
+#         jawaban_dasar_svm = get_profanity_response()
+#         kategori_terdeteksi = "profanity"
+        
+#     else:
+#         # 2. Load Model & Pastikan Data Tersedia
+#         load_models_and_data()
+#         if model_qa is None or vectorizer_qa is None:
+#             return jsonify({'error': 'Model belum siap, lakukan training terlebih dahulu.'}), 500
+
+#         # 3. Preprocessing & Transform Input User ke TF-IDF
+#         from preprocessing import preprocess
+#         processed_input = preprocess(user_input)
+#         X_input_tfidf = vectorizer_qa.transform([processed_input])
+
+#         # Jika kata kunci tidak ada sama sekali di kamus TF-IDF
+#         if X_input_tfidf.nnz == 0:
+#             save_unknown_question(user_input)
+#             jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
+#             kategori_terdeteksi = "unknown"
+            
+#         else:
+#             # 4. PREDIKSI KATEGORI MENGGUNAKAN LINEAR SVM
+#             predicted_category = model_qa.predict(X_input_tfidf)[0]
+
+#             # 5. PENCOCOKAN JAWABAN SPESIFIK (Mencari dokumen terdekat)
+#             X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
+#             predict_answer_score = (X_input_tfidf * X_all_questions_tfidf.T).toarray().flatten()
+
+#             # Ambil indeks dokumen yang berada di bawah kategori hasil prediksi SVM
+#             category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
+
+#             if not category_indices:
+#                 save_unknown_question(user_input)
+#                 jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
+#                 kategori_terdeteksi = "unknown"
+#             else:
+#                 # Cari jawaban dengan skor kecocokan tertinggi di kategori tersebut
+#                 best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
+#                 max_predict_score = predict_answer_score[best_index]
+
+#                 # Threshold ketat: jika skor tertinggi masih terlalu rendah, anggap unknown
+#                 if max_predict_score < 0.15:
+#                     save_unknown_question(user_input)
+#                     jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
+#                     kategori_terdeteksi = "unknown"
+#                 else:
+#                     # NORMAL (Sukses mendapatkan jawaban terbaik dari dataset SVM)
+#                     jawaban_dasar_svm = str(answers[best_index])
+#                     kategori_terdeteksi = str(predicted_category)
+
+#     # =========================================================================
+#     # SISI 2: KIRIM 3 PARAMETER SEKALIGUS KE WEBHOOK PRODUCTION N8N
+#     # =========================================================================
+#     # Disarankan ganti /webhook-test/ ke /webhook/ jika sudah siap production
+#     n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/v1/chat-enhance"
+    
+#     headers_n8n = {
+#         "Content-Type": "application/json",
+#         "X-API-Key": "hG&*g^td&^@!%*^98*$%hY12^%75*!@*%uiy*^&^rs75&&^^FTF*%"
+#     }
+    
+#     payload_n8n = {
+#         "pertanyaan": str(user_input),
+#         "jawaban_svm": str(jawaban_dasar_svm),
+#         "kategori": str(kategori_terdeteksi)
+#     }
+
+#     try:
+#         import requests
+#         response_n8n = requests.post(n8n_webhook_url, json=payload_n8n, headers=headers_n8n, timeout=25)
+        
+#         if response_n8n.status_code == 200:
+#             return jsonify(response_n8n.json()), 200
+#         else:
+#             logger.warning(f"n8n merespon error {response_n8n.status_code}. Mengaktifkan fallback jawaban SVM asli.")
+#             return jsonify({
+#                 'status': 'success',
+#                 'answer': jawaban_dasar_svm
+#             }), 200
+
+#     except Exception as e:
+#         logger.error(f"Koneksi ke n8n Timeout/Gagal, mengaktifkan fallback jawaban SVM asli: {str(e)}")
+#         return jsonify({
+#             'status': 'success',
+#             'answer': jawaban_dasar_svm
+#         }), 200
+
 @app.route('/api/chat-n8n-proxy', methods=['POST', 'OPTIONS'])
 @api_key_required
 def chat_n8n_proxy():
@@ -573,70 +681,67 @@ def chat_n8n_proxy():
         return jsonify({'error': 'Pertanyaan tidak boleh kosong'}), 400
 
     user_input = data['pertanyaan']
-    logger.info(f"[Hybrid AI] Memproses SVM Lokal -> Alibaba n8n untuk: {user_input}")
+    logger.info(f"[Optimasi Token] Memproses Hybrid AI untuk: {user_input}")
 
     # =========================================================================
-    # SISI 1: LOGIKA SVM ASLI ANDA (PROSES LOKAL SECARA MANDIRI)
+    # SISI 1: JALANKAN KLASIFIKASI SVM & FILTER TOP-3 ALTERNATIF TERDEKAT
     # =========================================================================
     jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
     kategori_terdeteksi = "unknown"
+    referensi_alternatif_text = "TIDAK_ADA_ALTERNATIF"
     
-    # 1. Proteksi Kata Kasar
     if contains_profanity(user_input):
         jawaban_dasar_svm = get_profanity_response()
         kategori_terdeteksi = "profanity"
-        
     else:
-        # 2. Load Model & Pastikan Data Tersedia
         load_models_and_data()
         if model_qa is None or vectorizer_qa is None:
             return jsonify({'error': 'Model belum siap, lakukan training terlebih dahulu.'}), 500
 
-        # 3. Preprocessing & Transform Input User ke TF-IDF
         from preprocessing import preprocess
         processed_input = preprocess(user_input)
         X_input_tfidf = vectorizer_qa.transform([processed_input])
 
-        # Jika kata kunci tidak ada sama sekali di kamus TF-IDF
-        if X_input_tfidf.nnz == 0:
-            save_unknown_question(user_input)
-            jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
-            kategori_terdeteksi = "unknown"
-            
-        else:
-            # 4. PREDIKSI KATEGORI MENGGUNAKAN LINEAR SVM
+        if X_input_tfidf.nnz > 0:
             predicted_category = model_qa.predict(X_input_tfidf)[0]
-
-            # 5. PENCOCOKAN JAWABAN SPESIFIK (Mencari dokumen terdekat)
+            
+            # Hitung skor kedekatan untuk ALL data di database
             X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
             predict_answer_score = (X_input_tfidf * X_all_questions_tfidf.T).toarray().flatten()
-
-            # Ambil indeks dokumen yang berada di bawah kategori hasil prediksi SVM
+            
             category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
 
-            if not category_indices:
-                save_unknown_question(user_input)
-                jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
-                kategori_terdeteksi = "unknown"
-            else:
-                # Cari jawaban dengan skor kecocokan tertinggi di kategori tersebut
+            if category_indices:
                 best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
                 max_predict_score = predict_answer_score[best_index]
 
-                # Threshold ketat: jika skor tertinggi masih terlalu rendah, anggap unknown
-                if max_predict_score < 0.15:
-                    save_unknown_question(user_input)
-                    jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
-                    kategori_terdeteksi = "unknown"
-                else:
-                    # NORMAL (Sukses mendapatkan jawaban terbaik dari dataset SVM)
+                # Jika SVM yakin dengan jawabannya
+                if max_predict_score >= 0.15:
                     jawaban_dasar_svm = str(answers[best_index])
                     kategori_terdeteksi = str(predicted_category)
+                else:
+                    save_unknown_question(user_input)
+                
+                # OPTIMASI TOKEN: Ambil 3 dokumen dengan skor kecocokan tertinggi secara global 
+                # untuk dijadikan cadangan n8n (Daripada mengirim seluruh isi database)
+                top_global_indices = sorted(range(len(predict_answer_score)), key=lambda i: predict_answer_score[i], reverse=True)[:3]
+                
+                lines = []
+                for rank, idx in enumerate(top_global_indices):
+                    # Hanya ambil jika memiliki nilai kemiripan dasar > 0.05
+                    if predict_answer_score[idx] > 0.05:
+                        lines.append(f"Alternatif {rank+1}:\nPertanyaan: {pertanyaan_list[idx]}\nJawaban: {answers[idx]}")
+                
+                if lines:
+                    referensi_alternatif_text = "\n\n".join(lines)
+            else:
+                save_unknown_question(user_input)
+        else:
+            save_unknown_question(user_input)
 
     # =========================================================================
-    # SISI 2: KIRIM 3 PARAMETER SEKALIGUS KE WEBHOOK PRODUCTION N8N
+    # SISI 2: KIRIM DATA RINGKAS KE WEBHOOK N8N (HEMAT 95% TOKEN CONTEXT)
     # =========================================================================
-    # Disarankan ganti /webhook-test/ ke /webhook/ jika sudah siap production
     n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/v1/chat-enhance"
     
     headers_n8n = {
@@ -647,7 +752,8 @@ def chat_n8n_proxy():
     payload_n8n = {
         "pertanyaan": str(user_input),
         "jawaban_svm": str(jawaban_dasar_svm),
-        "kategori": str(kategori_terdeteksi)
+        "kategori": str(kategori_terdeteksi),
+        "referensi_alternatif": str(referensi_alternatif_text) # Berisi max 3 baris data saja!
     }
 
     try:
@@ -657,18 +763,11 @@ def chat_n8n_proxy():
         if response_n8n.status_code == 200:
             return jsonify(response_n8n.json()), 200
         else:
-            logger.warning(f"n8n merespon error {response_n8n.status_code}. Mengaktifkan fallback jawaban SVM asli.")
-            return jsonify({
-                'status': 'success',
-                'answer': jawaban_dasar_svm
-            }), 200
+            return jsonify({'status': 'success', 'answer': jawaban_dasar_svm}), 200
 
     except Exception as e:
-        logger.error(f"Koneksi ke n8n Timeout/Gagal, mengaktifkan fallback jawaban SVM asli: {str(e)}")
-        return jsonify({
-            'status': 'success',
-            'answer': jawaban_dasar_svm
-        }), 200
+        logger.error(f"Koneksi n8n RTO/Gagal, mengaktifkan fallback: {str(e)}")
+        return jsonify({'status': 'success', 'answer': jawaban_dasar_svm}), 200
 
 @app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
 @api_key_required
