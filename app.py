@@ -716,7 +716,7 @@ def chat_n8n_proxy():
                 max_predict_score = predict_answer_score[best_index]
 
                 # Jika SVM yakin dengan jawabannya
-                if max_predict_score >= 0.15:
+                if max_predict_score >= 0.35:
                     jawaban_dasar_svm = str(answers[best_index])
                     kategori_terdeteksi = str(predicted_category)
                 else:
