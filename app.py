@@ -591,7 +591,7 @@ def chat_n8n_proxy():
     try:
         import requests
         # Lakukan tembakan langsung server-to-server (Dijamin 100% Tembus Tanpa Halangan CORS)
-        response_n8n = requests.post(n8n_webhook_url, json=payload_n8n, headers=headers_n8n, timeout=20)
+        response_n8n = requests.post(n8n_webhook_url, json=payload_n8n, headers=headers_n8n, timeout=50)
         
         if response_n8n.status_code == 200:
             data_dari_n8n = response_n8n.json()
