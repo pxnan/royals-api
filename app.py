@@ -742,7 +742,7 @@ def chat_n8n_proxy():
     # =========================================================================
     # SISI 2: KIRIM DATA RINGKAS KE WEBHOOK N8N (HEMAT 95% TOKEN CONTEXT)
     # =========================================================================
-    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/v1/chat-enhance"
+    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/royal-resto-qa"
     
     headers_n8n = {
         "Content-Type": "application/json",
