@@ -491,7 +491,7 @@ def chat():
     if request.method == 'OPTIONS':
         return '', 200
     
-    user_input = request.json.get('pertanyaan', '')
+    user_input = request.json.get('pertanyaan') or request.json.get('question') or ''
     if not user_input:
         return jsonify({'error': 'Pertanyaan kosong'}), 400
 
@@ -510,8 +510,6 @@ def chat():
 
     # 3. Preprocessing & Transform Input User ke TF-IDF
     from preprocessing import preprocess
-    import numpy as np
-    
     processed_input = preprocess(user_input)
     X_input_tfidf = vectorizer_qa.transform([processed_input])
 
@@ -527,13 +525,11 @@ def chat():
     # 4. PREDIKSI KATEGORI MENGGUNAKAN LINEAR SVM
     predicted_category = model_qa.predict(X_input_tfidf)[0]
 
-    # 5. PENCOCOKAN JAWABAN SPESIFIK (Mencari dokumen terdekat di dalam kategori terpilih)
+    # 5. PENCOCOKAN JAWABAN SPESIFIK (Mencari dokumen terdekat)
     X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
-    
-    # Menghitung skor prediksi kecocokan setiap jawaban via perkalian matriks
     predict_answer_score = (X_input_tfidf * X_all_questions_tfidf.T).toarray().flatten()
 
-    # Kumpulkan semua dokumen yang berada di bawah kategori hasil prediksi SVM
+    # Ambil indeks dokumen yang berada di bawah kategori hasil prediksi SVM
     category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
 
     if not category_indices:
@@ -544,17 +540,11 @@ def chat():
             'status': 'unknown'
         }), 200
 
-    # Urutkan indeks berdasarkan skor prediksi jawaban tertinggi khusus di kategori tersebut
-    sorted_category_indices = sorted(category_indices, key=lambda idx: predict_answer_score[idx], reverse=True)
-    
-    # Ambil 3 peringkat teratas beserta skornya
-    top_indices = sorted_category_indices[:3]
-    top_scores = [predict_answer_score[i] for i in top_indices]
-    
-    max_predict_score = top_scores[0]
+    # Cari jawaban dengan skor kecocokan tertinggi di kategori tersebut
+    best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
+    max_predict_score = predict_answer_score[best_index]
 
-    # DETEKSI AMBIGU & THRESHOLD KETAT
-    # KASUS 1: Jika skor prediksi tertinggi masih di bawah ambang batas dasar
+    # Threshold ketat: jika skor tertinggi masih terlalu rendah, anggap unknown
     if max_predict_score < 0.15:
         save_unknown_question(user_input)
         return jsonify({
@@ -563,52 +553,14 @@ def chat():
             'status': 'unknown'
         }), 200
 
-    # KASUS 2: DETEKSI AMBIGU
-    is_ambiguous = False
-    if len(top_scores) > 1:
-        score_gap = abs(top_scores[0] - top_scores[1])
-        if max_predict_score < 0.55 and score_gap < 0.08:
-            is_ambiguous = True
-
-    if is_ambiguous:
-        user_input_clean = user_input.lower().strip()
-        exact_match_idx = -1
-        
-        # Pengecekan Exact Match
-        for idx in top_indices:
-            if user_input_clean == pertanyaan_list[idx].lower().strip():
-                exact_match_idx = idx
-                break
-
-        # Jika ada exact match, batalkan ambigu, langsung berikan jawabannya
-        if exact_match_idx >= 0:
-            return jsonify({
-                'pertanyaan': user_input,
-                'jawaban': answers[exact_match_idx],
-                'status': 'ok',
-                'kategori': predicted_category
-            })
-
-        # Tampilkan opsi rekomendasi pertanyaan yang mirip
-        similar_questions = [pertanyaan_list[i] for i in top_indices]
-        return jsonify({
-            'pertanyaan': user_input,
-            'opsi_pertanyaan': similar_questions,
-            'jawaban': "Pertanyaan mana yang kamu maksud?",
-            'status': 'ambigu',
-            'recommendation_type': 'random'
-        })
-
-    # KASUS 3: NORMAL (Satu jawaban spesifik terprediksi dengan yakin)
-    else:
-        best_index = top_indices[0]
-        return jsonify({
-            'pertanyaan': user_input,
-            'jawaban': answers[best_index],
-            'status': 'ok',
-            'kategori': predicted_category,
-            'confidence_score': float(max_predict_score) # Digunakan untuk kebutuhan visualisasi Bab 4
-        }), 200
+    # Mengembalikan SATU JAWABAN TERBAIK (Tanpa deteksi ambigu)
+    return jsonify({
+        'pertanyaan': user_input,
+        'jawaban': str(answers[best_index]),
+        'status': 'ok',
+        'kategori': str(predicted_category),
+        'confidence_score': float(max_predict_score)
+    }), 200
         
 @app.route('/api/chat-n8n-proxy', methods=['POST', 'OPTIONS'])
 @api_key_required
