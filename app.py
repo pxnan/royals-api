@@ -565,7 +565,6 @@ def chat():
 @app.route('/api/chat-n8n-proxy', methods=['POST', 'OPTIONS'])
 @api_key_required
 def chat_n8n_proxy():
-    # Menangani preflight request OPTIONS dari browser agar lolos CORS
     if request.method == 'OPTIONS':
         return '', 200
         
@@ -574,41 +573,78 @@ def chat_n8n_proxy():
         return jsonify({'error': 'Pertanyaan tidak boleh kosong'}), 400
 
     user_input = data['pertanyaan']
-    logger.info(f"[Proxy n8n] Meneruskan pertanyaan ke n8n: {user_input}")
+    logger.info(f"[Hybrid AI] Memproses SVM lokal untuk pertanyaan: {user_input}")
 
-    # Konfigurasi n8n tujuan
-    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/v1/chat-enhance"
+    # =========================================================================
+    # SISI 1: PROSES KLASIFIKASI SVM SECARA LOKAL (MENCARI DATASET ASLI)
+    # =========================================================================
+    jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
+    kategori_terdeteksi = "unknown"
+    
+    if contains_profanity(user_input):
+        jawaban_dasar_svm = get_profanity_response()
+        kategori_terdeteksi = "profanity"
+    else:
+        load_models_and_data()
+        if model_qa is not None and vectorizer_qa is not None:
+            from preprocessing import preprocess
+            processed_input = preprocess(user_input)
+            X_input_tfidf = vectorizer_qa.transform([processed_input])
+
+            if X_input_tfidf.nnz > 0:
+                predicted_category = model_qa.predict(X_input_tfidf)[0]
+                X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
+                predict_answer_score = (X_input_tfidf * X_all_questions_tfidf.T).toarray().flatten()
+                category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
+
+                if category_indices:
+                    best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
+                    if predict_answer_score[best_index] >= 0.15:
+                        jawaban_dasar_svm = str(answers[best_index])
+                        kategori_terdeteksi = str(predicted_category)
+                    else:
+                        save_unknown_question(user_input)
+                else:
+                    save_unknown_question(user_input)
+            else:
+                save_unknown_question(user_input)
+
+    # =========================================================================
+    # SISI 2: KIRIM 3 DATA SEKALIGUS KE WEBHOOK N8N (ALIBABA CLOUD / QWEN)
+    # =========================================================================
+    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook-test/v1/chat-enhance"
     
     headers_n8n = {
         "Content-Type": "application/json",
         "X-API-Key": "hG&*g^td&^@!%*^98*$%hY12^%75*!@*%uiy*^&^rs75&&^^FTF*%"
     }
     
+    # Payload dikemas rapi berisi 3 komponen sesuai permintaan Anda
     payload_n8n = {
-        "pertanyaan": str(user_input)
+        "pertanyaan": str(user_input),
+        "jawaban_svm": str(jawaban_dasar_svm),
+        "kategori": str(kategori_terdeteksi)
     }
 
     try:
         import requests
-        # Lakukan tembakan langsung server-to-server (Dijamin 100% Tembus Tanpa Halangan CORS)
-        response_n8n = requests.post(n8n_webhook_url, json=payload_n8n, headers=headers_n8n, timeout=50)
+        # Kirim data ke n8n dengan batas timeout yang aman (25 detik)
+        response_n8n = requests.post(n8n_webhook_url, json=payload_n8n, headers=headers_n8n, timeout=25)
         
         if response_n8n.status_code == 200:
-            data_dari_n8n = response_n8n.json()
-            # Teruskan object response asli dari n8n (mengandung status dan answer) langsung ke frontend
-            return jsonify(data_dari_n8n), 200
+            return jsonify(response_n8n.json()), 200
         else:
-            logger.error(f"n8n merespon dengan status error: {response_n8n.status_code}")
+            logger.warning(f"n8n gagal merespon ({response_n8n.status_code}), mengaktifkan fallback SVM lokal.")
             return jsonify({
-                'status': 'error',
-                'answer': "Maaf, terjadi gangguan komunikasi pada server AI eksternal kami."
+                'status': 'success',
+                'answer': jawaban_dasar_svm
             }), 200
 
     except Exception as e:
-        logger.error(f"Koneksi Proxy ke n8n Gagal/Timeout: {str(e)}")
+        logger.error(f"Koneksi n8n gagal atau RTO, mengaktifkan fallback SVM lokal: {str(e)}")
         return jsonify({
-            'status': 'error',
-            'answer': "Maaf, koneksi ke pusat layanan AI sedang terputus. Silakan coba sesaat lagi."
+            'status': 'success',
+            'answer': jawaban_dasar_svm
         }), 200
 
 @app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
