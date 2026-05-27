@@ -609,6 +609,55 @@ def chat():
             'kategori': predicted_category,
             'confidence_score': float(max_predict_score) # Digunakan untuk kebutuhan visualisasi Bab 4
         }), 200
+        
+@app.route('/api/chat-n8n-proxy', methods=['POST', 'OPTIONS'])
+@api_key_required
+def chat_n8n_proxy():
+    # Menangani preflight request OPTIONS dari browser agar lolos CORS
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    data = request.json
+    if not data or 'pertanyaan' not in data:
+        return jsonify({'error': 'Pertanyaan tidak boleh kosong'}), 400
+
+    user_input = data['pertanyaan']
+    logger.info(f"[Proxy n8n] Meneruskan pertanyaan ke n8n: {user_input}")
+
+    # Konfigurasi n8n tujuan
+    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook-test/v1/chat-enhance"
+    
+    headers_n8n = {
+        "Content-Type": "application/json",
+        "X-API-Key": "hG&*g^td&^@!%*^98*$%hY12^%75*!@*%uiy*^&^rs75&&^^FTF*%"
+    }
+    
+    payload_n8n = {
+        "pertanyaan": str(user_input)
+    }
+
+    try:
+        import requests
+        # Lakukan tembakan langsung server-to-server (Dijamin 100% Tembus Tanpa Halangan CORS)
+        response_n8n = requests.post(n8n_webhook_url, json=payload_n8n, headers=headers_n8n, timeout=20)
+        
+        if response_n8n.status_code == 200:
+            data_dari_n8n = response_n8n.json()
+            # Teruskan object response asli dari n8n (mengandung status dan answer) langsung ke frontend
+            return jsonify(data_dari_n8n), 200
+        else:
+            logger.error(f"n8n merespon dengan status error: {response_n8n.status_code}")
+            return jsonify({
+                'status': 'error',
+                'answer': "Maaf, terjadi gangguan komunikasi pada server AI eksternal kami."
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Koneksi Proxy ke n8n Gagal/Timeout: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'answer': "Maaf, koneksi ke pusat layanan AI sedang terputus. Silakan coba sesaat lagi."
+        }), 200
 
 @app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
 @api_key_required
