@@ -625,7 +625,7 @@ def chat_n8n_proxy():
     logger.info(f"[Proxy n8n] Meneruskan pertanyaan ke n8n: {user_input}")
 
     # Konfigurasi n8n tujuan
-    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook-test/v1/chat-enhance"
+    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/v1/chat-enhance"
     
     headers_n8n = {
         "Content-Type": "application/json",
