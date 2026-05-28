@@ -658,7 +658,7 @@ def chat_n8n_proxy():
         else:
             save_unknown_question(user_input)
 
-    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/royal-resto-qa"
+    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/v1/chat-enhance"
     headers_n8n = {
         "Content-Type": "application/json",
         "X-API-Key": "hG&*g^td&^@!%*^98*$%hY12^%75*!@*%uiy*^&^rs75&&^^FTF*%"
@@ -666,8 +666,7 @@ def chat_n8n_proxy():
     payload_n8n = {
         "pertanyaan": str(user_input),
         "jawaban_svm": str(jawaban_dasar_svm),
-        "kategori": str(kategori_terdeteksi),
-        "referensi_alternatif": str(referensi_alternatif_text)
+        "kategori": str(kategori_terdeteksi)
     }
 
     try:
