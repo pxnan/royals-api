@@ -294,14 +294,22 @@ def load_model_from_supabase():
     if supabase is None:
         logger.warning("Supabase not configured")
         return None
+    if not BUCKET_NAME or not MODEL_FILE:
+        logger.warning("BUCKET_NAME atau MODEL_FILE tidak dikonfigurasi")
+        return None
     try:
         t0 = time.time()
+        logger.info(f"[Supabase] Mulai download model: bucket={BUCKET_NAME}, file={MODEL_FILE}")
         file_data = supabase.storage.from_(BUCKET_NAME).download(MODEL_FILE)
+        if not file_data:
+            logger.error("[Supabase] Download berhasil tapi data kosong/None")
+            return None
+        logger.info(f"[Supabase] Download selesai ({len(file_data)} bytes) dalam {time.time()-t0:.2f}s")
         model_data = pickle.loads(file_data)
-        logger.info(f"Model loaded from Supabase in {time.time()-t0:.2f}s")
+        logger.info(f"[Supabase] Model di-unpickle dalam {time.time()-t0:.2f}s total")
         return model_data
     except Exception as e:
-        logger.error(f"Failed to load model from Supabase: {e}")
+        logger.error(f"[Supabase] Gagal load model: {type(e).__name__}: {e}")
         return None
 
 def save_model_to_supabase(model_data):
@@ -348,8 +356,8 @@ def _build_questions_cache():
 
 def load_models_and_data():
     """
-    FIX #2: Thread-safe lazy loading dengan flag _models_loading agar
-    dua request bersamaan tidak men-download model dua kali dari Supabase.
+    Thread-safe lazy loading. Jika Supabase gagal/timeout,
+    flag di-reset agar request berikutnya bisa retry.
     """
     global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
     global _models_loaded, _models_loading, _X_all_questions_cache
@@ -360,15 +368,17 @@ def load_models_and_data():
     with _models_lock:
         if _models_loaded:
             return
+        # Jika sudah ada thread yang loading, tunggu max 20 detik
         if _models_loading:
-            # Request lain sedang loading, tunggu sampai selesai
             logger.info("Model sedang dimuat oleh thread lain, menunggu...")
-            while _models_loading and not _models_loaded:
-                time.sleep(0.1)
+            waited = 0
+            while _models_loading and not _models_loaded and waited < 20:
+                time.sleep(0.2)
+                waited += 0.2
             return
-
         _models_loading = True
 
+    success = False
     try:
         model_data = load_model_from_supabase()
         if model_data:
@@ -378,14 +388,20 @@ def load_models_and_data():
             pertanyaan_list = model_data['questions']
             kategori_list = model_data.get('categories', [])
             logger.info(f"Model loaded from Supabase: {len(pertanyaan_list)} questions")
-            _build_questions_cache()   # FIX #3: build cache langsung setelah load
+            _build_questions_cache()
+            success = True
         else:
             load_dataset_from_db()
-            logger.warning("No model available, please train first")
+            logger.warning("Tidak ada model di Supabase, hanya dataset yang dimuat")
+            success = True   # dataset berhasil dimuat walau tanpa model
+    except Exception as e:
+        logger.error(f"load_models_and_data error: {e}")
+        success = False
     finally:
         with _models_lock:
-            _models_loaded = True
-            _models_loading = False
+            if success:
+                _models_loaded = True   # jangan retry kalau sudah berhasil
+            _models_loading = False     # selalu reset flag loading
 
 
 # ===================== Background Warmup =====================
@@ -1776,6 +1792,68 @@ def test_db():
             return "DB FAILED"
     except Exception as e:
         return str(e)
+
+
+@app.route('/api/debug-model', methods=['GET'])
+def debug_model():
+    """
+    Endpoint diagnosa: cek koneksi Supabase, ukuran file model,
+    koneksi DB, dan env variables — tanpa perlu lihat server log.
+    Hapus endpoint ini setelah masalah terselesaikan.
+    """
+    result = {
+        "env": {
+            "SUPABASE_URL": SUPABASE_URL[:30] + "..." if SUPABASE_URL else None,
+            "SUPABASE_ANON_KEY": "SET" if SUPABASE_ANON_KEY else "MISSING",
+            "BUCKET_NAME": BUCKET_NAME,
+            "MODEL_FILE": MODEL_FILE,
+            "MYSQL_HOST": MYSQL_HOST[:20] + "..." if MYSQL_HOST else None,
+        },
+        "state": {
+            "model_loaded": model_qa is not None,
+            "vectorizer_loaded": vectorizer_qa is not None,
+            "dataset_size": len(pertanyaan_list),
+            "_models_loaded_flag": _models_loaded,
+            "_models_loading_flag": _models_loading,
+            "cache_built": _X_all_questions_cache is not None,
+        },
+        "supabase_test": None,
+        "supabase_file_size_bytes": None,
+        "db_test": None,
+        "errors": []
+    }
+
+    # Test Supabase
+    if supabase and BUCKET_NAME and MODEL_FILE:
+        try:
+            t0 = time.time()
+            data = supabase.storage.from_(BUCKET_NAME).download(MODEL_FILE)
+            elapsed = round(time.time() - t0, 2)
+            result["supabase_test"] = f"OK ({elapsed}s)"
+            result["supabase_file_size_bytes"] = len(data) if data else 0
+        except Exception as e:
+            result["supabase_test"] = f"ERROR: {type(e).__name__}: {str(e)[:200]}"
+            result["errors"].append(str(e))
+    else:
+        result["supabase_test"] = "SKIP - tidak terkonfigurasi"
+
+    # Test DB
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM dataset")
+            count = cur.fetchone()[0]
+            cur.close()
+            conn.close()
+            result["db_test"] = f"OK - {count} rows in dataset"
+        else:
+            result["db_test"] = "FAILED - cannot connect"
+    except Exception as e:
+        result["db_test"] = f"ERROR: {str(e)[:200]}"
+        result["errors"].append(str(e))
+
+    return jsonify(result), 200
 
 
 @app.route('/api/debug-headers', methods=['GET'])
