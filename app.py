@@ -506,89 +506,126 @@ def warmup():
 
 
 # ==================== CHAT ENDPOINTS ====================
-@app.route('/api/chat', methods=['POST', 'OPTIONS'])
-@api_key_required
-def chat():
-    if request.method == 'OPTIONS':
-        return '', 200
+# ==================== CORE SVM PREDICTION FUNCTION ====================
+def predict_svm(user_input):
+    """
+    Fungsi inti prediksi SVM — dipakai oleh /api/chat dan /api/chat-n8n-proxy.
 
-    user_input = request.json.get('pertanyaan') or request.json.get('question') or ''
-    if not user_input:
-        return jsonify({'error': 'Pertanyaan kosong'}), 400
+    Return dict dengan keys:
+      - status      : 'ok' | 'unknown' | 'error' | 'profanity' | 'no_model'
+      - jawaban     : string jawaban terbaik
+      - kategori    : string kategori (jika status 'ok')
+      - confidence_score : float (jika status 'ok')
+      - referensi_alternatif : list of dict top-3 [{pertanyaan, jawaban, score}]
+                               (selalu diisi, kosong [] jika tidak ada kandidat)
+    """
+    global _X_all_questions_cache
 
-    # 1. Proteksi Kata Kasar
+    # 1. Proteksi kata kasar
     if contains_profanity(user_input):
-        return jsonify({
-            'pertanyaan': user_input,
+        return {
+            'status': 'profanity',
             'jawaban': get_profanity_response(),
-            'status': 'error'
-        }), 200
+            'kategori': 'profanity',
+            'confidence_score': 0.0,
+            'referensi_alternatif': []
+        }
 
-    # 2. Pastikan model sudah tersedia (sudah di-warmup di background)
+    # 2. Pastikan model tersedia
     load_models_and_data()
     if model_qa is None or vectorizer_qa is None:
-        return jsonify({'error': 'Model belum siap, lakukan training terlebih dahulu.'}), 500
+        return {
+            'status': 'no_model',
+            'jawaban': 'Model belum siap, lakukan training terlebih dahulu.',
+            'kategori': 'unknown',
+            'confidence_score': 0.0,
+            'referensi_alternatif': []
+        }
 
-    # 3. Preprocessing & Transform Input User ke TF-IDF
+    # 3. Preprocessing & TF-IDF transform
     processed_input = preprocess(user_input)
     X_input_tfidf = vectorizer_qa.transform([processed_input])
 
     if X_input_tfidf.nnz == 0:
         save_unknown_question(user_input)
-        return jsonify({
-            'pertanyaan': user_input,
-            'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown'
-        }), 200
+        return {
+            'status': 'unknown',
+            'jawaban': 'Mohon maaf, saya belum mengerti pertanyaan Anda.',
+            'kategori': 'unknown',
+            'confidence_score': 0.0,
+            'referensi_alternatif': []
+        }
 
-    # 4. Prediksi Kategori dengan Linear SVM
+    # 4. Prediksi kategori dengan Linear SVM
     predicted_category = model_qa.predict(X_input_tfidf)[0]
 
-    # 5. FIX #3: Gunakan cache matrix TF-IDF (tidak re-compute setiap request)
-    global _X_all_questions_cache
+    # 5. Hitung skor kemiripan pakai cache TF-IDF
     if _X_all_questions_cache is None:
         _build_questions_cache()
     if _X_all_questions_cache is None:
         save_unknown_question(user_input)
-        return jsonify({
-            'pertanyaan': user_input,
-            'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown'
-        }), 200
+        return {
+            'status': 'unknown',
+            'jawaban': 'Mohon maaf, saya belum mengerti pertanyaan Anda.',
+            'kategori': 'unknown',
+            'confidence_score': 0.0,
+            'referensi_alternatif': []
+        }
 
     predict_answer_score = (X_input_tfidf * _X_all_questions_cache.T).toarray().flatten()
 
-    # 6. Filter per kategori
+    # 6. Kumpulkan top-3 alternatif global (untuk konteks n8n)
+    top_global_indices = sorted(
+        range(len(predict_answer_score)),
+        key=lambda i: predict_answer_score[i],
+        reverse=True
+    )[:3]
+    referensi_alternatif = [
+        {
+            'pertanyaan': pertanyaan_list[idx],
+            'jawaban': answers[idx],
+            'score': float(predict_answer_score[idx])
+        }
+        for idx in top_global_indices
+        if predict_answer_score[idx] > 0.05
+    ]
+
+    # 7. Filter ke kategori hasil prediksi SVM
     category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
 
     if not category_indices:
         save_unknown_question(user_input)
-        return jsonify({
-            'pertanyaan': user_input,
-            'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown'
-        }), 200
+        return {
+            'status': 'unknown',
+            'jawaban': 'Mohon maaf, saya belum mengerti pertanyaan Anda.',
+            'kategori': str(predicted_category),
+            'confidence_score': 0.0,
+            'referensi_alternatif': referensi_alternatif
+        }
 
     best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
     max_predict_score = predict_answer_score[best_index]
 
     if max_predict_score < 0.15:
         save_unknown_question(user_input)
-        return jsonify({
-            'pertanyaan': user_input,
-            'jawaban': "Mohon maaf, saya belum mengerti pertanyaan Anda.",
-            'status': 'unknown'
-        }), 200
+        return {
+            'status': 'unknown',
+            'jawaban': 'Mohon maaf, saya belum mengerti pertanyaan Anda.',
+            'kategori': str(predicted_category),
+            'confidence_score': float(max_predict_score),
+            'referensi_alternatif': referensi_alternatif
+        }
 
-    return jsonify({
-        'pertanyaan': user_input,
-        'jawaban': str(answers[best_index]),
+    return {
         'status': 'ok',
+        'jawaban': str(answers[best_index]),
         'kategori': str(predicted_category),
-        'confidence_score': float(max_predict_score)
-    }), 200
+        'confidence_score': float(max_predict_score),
+        'referensi_alternatif': referensi_alternatif
+    }
 
 
+# ==================== CHAT ENDPOINTS ====================
 @app.route('/api/chat-n8n-proxy', methods=['POST', 'OPTIONS'])
 @api_key_required
 def chat_n8n_proxy():
@@ -600,73 +637,34 @@ def chat_n8n_proxy():
         return jsonify({'error': 'Pertanyaan tidak boleh kosong'}), 400
 
     user_input = data['pertanyaan']
-    logger.info(f"[Optimasi Token] Memproses Hybrid AI untuk: {user_input}")
+    logger.info(f"[n8n-proxy] Memproses: {user_input}")
 
-    jawaban_dasar_svm = "Mohon maaf, saya belum mengerti pertanyaan Anda."
-    kategori_terdeteksi = "unknown"
-    referensi_alternatif_text = "TIDAK_ADA_ALTERNATIF"
+    # Pakai fungsi prediksi yang sama dengan /api/chat
+    result = predict_svm(user_input)
 
-    if contains_profanity(user_input):
-        jawaban_dasar_svm = get_profanity_response()
-        kategori_terdeteksi = "profanity"
-    else:
-        load_models_and_data()
-        if model_qa is None or vectorizer_qa is None:
-            return jsonify({'error': 'Model belum siap, lakukan training terlebih dahulu.'}), 500
+    if result['status'] == 'no_model':
+        return jsonify({'error': result['jawaban']}), 500
 
-        processed_input = preprocess(user_input)
-        X_input_tfidf = vectorizer_qa.transform([processed_input])
+    jawaban_svm = result['jawaban']
+    kategori    = result['kategori']
 
-        if X_input_tfidf.nnz > 0:
-            predicted_category = model_qa.predict(X_input_tfidf)[0]
+    # Susun referensi alternatif sebagai teks untuk konteks n8n
+    lines = [
+        f"Alternatif {i+1}:\nPertanyaan: {r['pertanyaan']}\nJawaban: {r['jawaban']}"
+        for i, r in enumerate(result['referensi_alternatif'])
+    ]
+    referensi_alternatif_text = "\n\n".join(lines) if lines else "TIDAK_ADA_ALTERNATIF"
 
-            # FIX #3: Gunakan cache
-            global _X_all_questions_cache
-            if _X_all_questions_cache is None:
-                _build_questions_cache()
-
-            if _X_all_questions_cache is not None:
-                predict_answer_score = (X_input_tfidf * _X_all_questions_cache.T).toarray().flatten()
-                category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
-
-                if category_indices:
-                    best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
-                    max_predict_score = predict_answer_score[best_index]
-
-                    if max_predict_score >= 0.15:
-                        jawaban_dasar_svm = str(answers[best_index])
-                        kategori_terdeteksi = str(predicted_category)
-                    else:
-                        save_unknown_question(user_input)
-
-                    top_global_indices = sorted(
-                        range(len(predict_answer_score)),
-                        key=lambda i: predict_answer_score[i],
-                        reverse=True
-                    )[:3]
-
-                    lines = []
-                    for rank, idx in enumerate(top_global_indices):
-                        if predict_answer_score[idx] > 0.05:
-                            lines.append(
-                                f"Alternatif {rank+1}:\nPertanyaan: {pertanyaan_list[idx]}\nJawaban: {answers[idx]}"
-                            )
-                    if lines:
-                        referensi_alternatif_text = "\n\n".join(lines)
-                else:
-                    save_unknown_question(user_input)
-        else:
-            save_unknown_question(user_input)
-
-    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/v1/chat-enhance"
+    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/royal-resto-qa"
     headers_n8n = {
         "Content-Type": "application/json",
         "X-API-Key": "hG&*g^td&^@!%*^98*$%hY12^%75*!@*%uiy*^&^rs75&&^^FTF*%"
     }
     payload_n8n = {
-        "pertanyaan": str(user_input),
-        "jawaban_svm": str(jawaban_dasar_svm),
-        "kategori": str(kategori_terdeteksi)
+        "pertanyaan":           str(user_input),
+        "jawaban_svm":          str(jawaban_svm),
+        "kategori":             str(kategori),
+        "referensi_alternatif": str(referensi_alternatif_text)
     }
 
     try:
@@ -675,10 +673,10 @@ def chat_n8n_proxy():
         if response_n8n.status_code == 200:
             return jsonify(response_n8n.json()), 200
         else:
-            return jsonify({'status': 'success', 'answer': jawaban_dasar_svm}), 200
+            return jsonify({'status': 'success', 'answer': jawaban_svm}), 200
     except Exception as e:
         logger.error(f"Koneksi n8n RTO/Gagal, mengaktifkan fallback: {str(e)}")
-        return jsonify({'status': 'success', 'answer': jawaban_dasar_svm}), 200
+        return jsonify({'status': 'success', 'answer': jawaban_svm}), 200
 
 
 @app.route('/api/chat/ambiguous-unknown', methods=['POST', 'OPTIONS'])
