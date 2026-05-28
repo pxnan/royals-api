@@ -633,7 +633,7 @@ def chat_n8n_proxy():
                     best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
                     max_predict_score = predict_answer_score[best_index]
 
-                    if max_predict_score >= 0.35:
+                    if max_predict_score >= 0.15:
                         jawaban_dasar_svm = str(answers[best_index])
                         kategori_terdeteksi = str(predicted_category)
                     else:
