@@ -356,8 +356,9 @@ def _build_questions_cache():
 
 def load_models_and_data():
     """
-    Thread-safe lazy loading. Jika Supabase gagal/timeout,
-    flag di-reset agar request berikutnya bisa retry.
+    Synchronous model loading — cocok untuk Vercel serverless.
+    Tidak pakai background thread karena Vercel membunuh thread antar-request.
+    Auto-reset jika flag stuck (misal dari deployment sebelumnya).
     """
     global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
     global _models_loaded, _models_loading, _X_all_questions_cache
@@ -365,20 +366,12 @@ def load_models_and_data():
     if _models_loaded:
         return
 
-    with _models_lock:
-        if _models_loaded:
-            return
-        # Jika sudah ada thread yang loading, tunggu max 20 detik
-        if _models_loading:
-            logger.info("Model sedang dimuat oleh thread lain, menunggu...")
-            waited = 0
-            while _models_loading and not _models_loaded and waited < 20:
-                time.sleep(0.2)
-                waited += 0.2
-            return
-        _models_loading = True
+    # Auto-reset jika flag loading stuck (tidak ada thread aktif di serverless)
+    if _models_loading:
+        logger.warning("Flag _models_loading stuck — auto-reset dan retry")
+        _models_loading = False
 
-    success = False
+    _models_loading = True
     try:
         model_data = load_model_from_supabase()
         if model_data:
@@ -387,43 +380,24 @@ def load_models_and_data():
             answers = model_data['answers']
             pertanyaan_list = model_data['questions']
             kategori_list = model_data.get('categories', [])
-            logger.info(f"Model loaded from Supabase: {len(pertanyaan_list)} questions")
+            logger.info(f"Model loaded: {len(pertanyaan_list)} questions")
             _build_questions_cache()
-            success = True
+            _models_loaded = True
         else:
+            # Model belum ada, muat dataset saja dari DB
             load_dataset_from_db()
-            logger.warning("Tidak ada model di Supabase, hanya dataset yang dimuat")
-            success = True   # dataset berhasil dimuat walau tanpa model
+            logger.warning("Tidak ada model di Supabase — dataset dimuat tanpa model ML")
+            _models_loaded = True
     except Exception as e:
         logger.error(f"load_models_and_data error: {e}")
-        success = False
+        # Jangan set _models_loaded = True agar bisa retry di request berikutnya
     finally:
-        with _models_lock:
-            if success:
-                _models_loaded = True   # jangan retry kalau sudah berhasil
-            _models_loading = False     # selalu reset flag loading
+        _models_loading = False
 
 
-# ===================== Background Warmup =====================
-# FIX #4: Muat model di background saat aplikasi pertama kali start.
-# Dengan ini, saat user pertama kirim chat, model sudah siap di memori.
-def _background_warmup():
-    """Jalankan warmup di background thread agar tidak memblokir startup."""
-    logger.info("[Warmup] Background model loading started...")
-    try:
-        load_models_and_data()
-        # Pemanasan koneksi database
-        conn = get_db_connection()
-        if conn:
-            conn.close()
-            logger.info("[Warmup] DB connection warmed up")
-        logger.info("[Warmup] Complete. Model ready.")
-    except Exception as e:
-        logger.error(f"[Warmup] Error: {e}")
-
-# Jalankan warmup saat modul dimuat (gunicorn worker start)
-_warmup_thread = threading.Thread(target=_background_warmup, daemon=True)
-_warmup_thread.start()
+# Background thread DIHAPUS — tidak reliable di Vercel serverless.
+# Model dimuat synchronous saat request pertama masuk ke /api/warmup atau /api/chat.
+logger.info("[App] Flask app initialized. Model akan dimuat saat request pertama.")
 
 
 # ===================== Profanity Filter =====================
@@ -514,19 +488,18 @@ def health():
 @app.route('/api/warmup', methods=['GET'])
 def warmup():
     """
-    Endpoint ringan untuk mencegah cold start.
-    Daftarkan URL ini ke UptimeRobot / cron-job.org dengan interval 4 menit.
+    Endpoint untuk mencegah cold start Vercel.
+    Daftarkan ke UptimeRobot / cron-job.org setiap 4 menit.
+    Loading dilakukan SYNCHRONOUS agar selesai dalam satu request.
     """
-    already_loaded = _models_loaded
-    if not already_loaded:
-        # Jika belum loaded, trigger di background (non-blocking)
-        if not _models_loading:
-            t = threading.Thread(target=load_models_and_data, daemon=True)
-            t.start()
+    t0 = time.time()
+    if not _models_loaded:
+        load_models_and_data()
     return jsonify({
         'status': 'ok',
-        'model_ready': _models_loaded,
+        'model_ready': _models_loaded and model_qa is not None,
         'dataset_size': len(pertanyaan_list),
+        'elapsed_ms': round((time.time() - t0) * 1000),
         'timestamp': datetime.now().isoformat()
     })
 
