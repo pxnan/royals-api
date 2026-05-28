@@ -505,22 +505,11 @@ def warmup():
     })
 
 
-# ==================== CHAT ENDPOINTS ====================
 # ==================== CORE SVM PREDICTION FUNCTION ====================
 def predict_svm(user_input):
     """
-    Fungsi inti prediksi SVM — dipakai oleh /api/chat dan /api/chat-n8n-proxy.
-
-    Return dict dengan keys:
-      - status      : 'ok' | 'unknown' | 'error' | 'profanity' | 'no_model'
-      - jawaban     : string jawaban terbaik
-      - kategori    : string kategori (jika status 'ok')
-      - confidence_score : float (jika status 'ok')
-      - referensi_alternatif : list of dict top-3 [{pertanyaan, jawaban, score}]
-                               (selalu diisi, kosong [] jika tidak ada kandidat)
+    Fungsi inti prediksi SVM yang telah diperbaiki untuk menangani kata sapaan pendek (Short-Text Match).
     """
-    global _X_all_questions_cache
-
     # 1. Proteksi kata kasar
     if contains_profanity(user_input):
         return {
@@ -531,7 +520,7 @@ def predict_svm(user_input):
             'referensi_alternatif': []
         }
 
-    # 2. Pastikan model tersedia
+    # 2. Load model & pastikan data tersedia
     load_models_and_data()
     if model_qa is None or vectorizer_qa is None:
         return {
@@ -542,10 +531,28 @@ def predict_svm(user_input):
             'referensi_alternatif': []
         }
 
-    # 3. Preprocessing & TF-IDF transform
+    # ==================== FIX: SHORT-TEXT EXACT MATCH ====================
+    # Membersihkan input user untuk perbandingan teks langsung (case-insensitive)
+    cleaned_user_input = user_input.strip().lower()
+    
+    # Cek apakah ada kecocokan teks langsung di dalam list pertanyaan database
+    for idx, q_db in enumerate(pertanyaan_list):
+        if q_db.strip().lower() == cleaned_user_input:
+            logger.info(f"[Exact Match] Menemukan kecocokan langsung untuk kata: '{user_input}'")
+            return {
+                'status': 'ok',
+                'jawaban': str(answers[idx]),
+                'kategori': str(kategori_list[idx]) if idx < len(kategori_list) else 'umum',
+                'confidence_score': 1.0,  # Nilai penuh karena cocok sempurna
+                'referensi_alternatif': []
+            }
+    # =====================================================================
+
+    # 3. Preprocessing & transform input user ke TF-IDF
     processed_input = preprocess(user_input)
     X_input_tfidf = vectorizer_qa.transform([processed_input])
 
+    # Jika kata kunci tidak ada sama sekali di kamus TF-IDF (dan lolos exact match)
     if X_input_tfidf.nnz == 0:
         save_unknown_question(user_input)
         return {
@@ -556,25 +563,14 @@ def predict_svm(user_input):
             'referensi_alternatif': []
         }
 
-    # 4. Prediksi kategori dengan Linear SVM
+    # 4. Prediksi kategori menggunakan Linear SVM
     predicted_category = model_qa.predict(X_input_tfidf)[0]
 
-    # 5. Hitung skor kemiripan pakai cache TF-IDF
-    if _X_all_questions_cache is None:
-        _build_questions_cache()
-    if _X_all_questions_cache is None:
-        save_unknown_question(user_input)
-        return {
-            'status': 'unknown',
-            'jawaban': 'Mohon maaf, saya belum mengerti pertanyaan Anda.',
-            'kategori': 'unknown',
-            'confidence_score': 0.0,
-            'referensi_alternatif': []
-        }
+    # 5. Pencocokan jawaban spesifik (mencari dokumen terdekat)
+    X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
+    predict_answer_score = (X_input_tfidf * X_all_questions_tfidf.T).toarray().flatten()
 
-    predict_answer_score = (X_input_tfidf * _X_all_questions_cache.T).toarray().flatten()
-
-    # 6. Kumpulkan top-3 alternatif global (untuk konteks n8n)
+    # Kumpulkan top-3 alternatif global (untuk konteks n8n)
     top_global_indices = sorted(
         range(len(predict_answer_score)),
         key=lambda i: predict_answer_score[i],
@@ -590,7 +586,7 @@ def predict_svm(user_input):
         if predict_answer_score[idx] > 0.05
     ]
 
-    # 7. Filter ke kategori hasil prediksi SVM
+    # Ambil indeks dokumen yang berada di bawah kategori hasil prediksi SVM
     category_indices = [idx for idx, cat in enumerate(kategori_list) if cat == predicted_category]
 
     if not category_indices:
@@ -603,9 +599,11 @@ def predict_svm(user_input):
             'referensi_alternatif': referensi_alternatif
         }
 
+    # Cari jawaban dengan skor kecocokan tertinggi di kategori tersebut
     best_index = max(category_indices, key=lambda idx: predict_answer_score[idx])
     max_predict_score = predict_answer_score[best_index]
 
+    # Threshold ketat
     if max_predict_score < 0.15:
         save_unknown_question(user_input)
         return {
@@ -616,6 +614,7 @@ def predict_svm(user_input):
             'referensi_alternatif': referensi_alternatif
         }
 
+    # Satu jawaban terbaik
     return {
         'status': 'ok',
         'jawaban': str(answers[best_index]),
@@ -647,6 +646,7 @@ def chat_n8n_proxy():
 
     jawaban_svm = result['jawaban']
     kategori    = result['kategori']
+    # print(f"[n8n-proxy] Prediksi SVM: jawaban='{jawaban_svm}', kategori='{kategori}', confidence={result['confidence_score']:.4f}")
 
     # Susun referensi alternatif sebagai teks untuk konteks n8n
     lines = [
