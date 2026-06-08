@@ -655,7 +655,7 @@ def chat_n8n_proxy():
     ]
     referensi_alternatif_text = "\n\n".join(lines) if lines else "TIDAK_ADA_ALTERNATIF"
 
-    n8n_webhook_url = "https://pasastimuslim.app.n8n.cloud/webhook/royal-resto-qa"
+    n8n_webhook_url = "https://pxnan.app.n8n.cloud/webhook/royal-resto-qa"
     headers_n8n = {
         "Content-Type": "application/json",
         "X-API-Key": "hG&*g^td&^@!%*^98*$%hY12^%75*!@*%uiy*^&^rs75&&^^FTF*%"
