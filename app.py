@@ -688,7 +688,7 @@ Aturan Tambahan:
             "anthropic-version": "2023-06-01"
         }
         payload_alibaba = {
-            "model": "qwen3.6-plus",
+            "model": "deepseek-v3.2",
             "max_tokens": 1024,
             "system": system_message,
             "messages": [
