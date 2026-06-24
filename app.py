@@ -636,7 +636,7 @@ def chat_n8n_proxy():
         return jsonify({'error': 'Pertanyaan tidak boleh kosong'}), 400
 
     user_input = data['pertanyaan']
-    logger.info(f"[n8n-proxy] Memproses: {user_input}")
+    logger.info(f"[claude-proxy] Memproses: {user_input}")
 
     # Pakai fungsi prediksi yang sama dengan /api/chat
     result = predict_svm(user_input)
@@ -646,36 +646,68 @@ def chat_n8n_proxy():
 
     jawaban_svm = result['jawaban']
     kategori    = result['kategori']
-    # print(f"[n8n-proxy] Prediksi SVM: jawaban='{jawaban_svm}', kategori='{kategori}', confidence={result['confidence_score']:.4f}")
 
-    # Susun referensi alternatif sebagai teks untuk konteks n8n
+    # Susun referensi alternatif sebagai teks untuk konteks Claude
     lines = [
         f"Alternatif {i+1}:\nPertanyaan: {r['pertanyaan']}\nJawaban: {r['jawaban']}"
         for i, r in enumerate(result['referensi_alternatif'])
     ]
     referensi_alternatif_text = "\n\n".join(lines) if lines else "TIDAK_ADA_ALTERNATIF"
 
-    n8n_webhook_url = "https://pxnan.app.n8n.cloud/webhook/royal-resto-qa"
-    headers_n8n = {
-        "Content-Type": "application/json",
-        "X-API-Key": "hG&*g^td&^@!%*^98*$%hY12^%75*!@*%uiy*^&^rs75&&^^FTF*%"
-    }
-    payload_n8n = {
-        "pertanyaan":           str(user_input),
-        "jawaban_svm":          str(jawaban_svm),
-        "kategori":             str(kategori),
-        "referensi_alternatif": str(referensi_alternatif_text)
-    }
+    # Prompt yang identik dengan yang digunakan di n8n QA & Enhancer Agent
+    user_prompt = f"""Anda adalah AI Quality Assurance sekaligus Enhancer bahasa untuk Chatbot Royal's Resto.
+Tugas Anda adalah memvalidasi, mengoreksi, atau memoles jawaban klasifikasi SVM agar menjadi sangat ramah dan profesional khas restoran bintang lima.
+
+Input Utama:
+- PERTANYAAN USER: {user_input}
+- JAWABAN DASAR SVM: {jawaban_svm}
+- KATEGORI TERPREDIKSI: {kategori}
+
+Data Referensi Cadangan (Top Terkait):
+{referensi_alternatif_text}
+
+Instruksi Logika Evaluasi & Pengambilan Keputusan:
+1. JIKA JAWABAN DASAR SVM sudah relevan, akurat, dan menjawab PERTANYAAN USER dengan benar (KATEGORI bukan "unknown"):
+   Gunakan informasi penting dari JAWABAN DASAR SVM tersebut (Jangan pernah mengubah data penting seperti harga atau nama menu asli!). Poles susunan kalimatnya agar ramah. Jika teks mengandung format kurung kurawal '{{}}' atau tanda pipa '|', hilangkan tanda tersebut dan susun menjadi daftar list bullet points markdown (* ) berjejer rapi ke bawah.
+2. JIKA KATEGORI bernilai "unknown" ATAU Anda merasa JAWABAN DASAR SVM tidak nyambung dengan PERTANYAAN USER:
+   Abaikan JAWABAN DASAR SVM tersebut. Lihat bagian "Data Referensi Cadangan (Top Terkait)" di atas.
+   - Jika Anda melihat ada "Alternatif" pertanyaan yang dirasa memiliki makna yang cocok dan benar maksudnya dengan apa yang ditanyakan USER, ambil data "Jawaban" dari alternatif tersebut, lalu poles kalimatnya agar ramah dan komunikatif.
+   - Jika tidak ada alternatif yang cocok atau saat kamu cek dan hasilnya meragukan dengan apa maksud yang ditanyakan user, atau isinya "TIDAK_ADA_ALTERNATIF", berikan respon penolakan baru yang sangat sopan dan ramah. Katakan bahwa Royal's Resto belum menyediakan informasi mendetail mengenai hal tersebut saat ini. Kemudian, sarankan secara halus kepada pelanggan untuk bertanya seputar menu makanan spesial, lokasi restoran, jam operasional, atau bantuan melakukan reservasi meja.
+
+Aturan Tambahan:
+- Langsung berikan hasil jawaban akhir yang siap dibaca oleh pelanggan tanpa menyertakan kata pengantar buatan AI seperti "Berikut hasil polesan saya:" atau "Berdasarkan alternatif yang saya temukan..."."""
+
+    system_message = "You are a professional restaurant assistant for Royal's Resto, a five-star establishment. Your role is to validate and enhance chatbot responses to be warm, friendly, and professional. Always maintain the accuracy of factual information like prices and menu names while improving the conversational tone."
 
     try:
-        import requests
-        response_n8n = requests.post(n8n_webhook_url, json=payload_n8n, headers=headers_n8n, timeout=25)
-        if response_n8n.status_code == 200:
-            return jsonify(response_n8n.json()), 200
+        import requests as req_lib
+        alibaba_url = "https://ws-fvkye3i925gbopy6.ap-southeast-1.maas.aliyuncs.com/apps/anthropic/v1/messages"
+        headers_alibaba = {
+            "Content-Type": "application/json",
+            "x-api-key": "sk-ws-H.LDDLRD.1amw.MEYCIQCfYqXfwZGkTNdFSwbVKV8buO7vzEgcPn8H-Yb_J-t_rgIhAId5Uv7R5oDHMKI4rXjpp55tQRLLumiWkcQSBrme-kNn",
+            "anthropic-version": "2023-06-01"
+        }
+        payload_alibaba = {
+            "model": "qwen3.6-plus",
+            "max_tokens": 1024,
+            "system": system_message,
+            "messages": [
+                {"role": "user", "content": user_prompt}
+            ]
+        }
+
+        response_alibaba = req_lib.post(alibaba_url, json=payload_alibaba, headers=headers_alibaba, timeout=30)
+
+        if response_alibaba.status_code == 200:
+            alibaba_data = response_alibaba.json()
+            answer_text = alibaba_data.get("content", [{}])[0].get("text", jawaban_svm)
+            return jsonify({'answer': answer_text, 'status': 'success'}), 200
         else:
+            logger.error(f"[alibaba-proxy] Alibaba MaaS API error {response_alibaba.status_code}: {response_alibaba.text}")
             return jsonify({'status': 'success', 'answer': jawaban_svm}), 200
+
     except Exception as e:
-        logger.error(f"Koneksi n8n RTO/Gagal, mengaktifkan fallback: {str(e)}")
+        logger.error(f"[alibaba-proxy] Koneksi Alibaba MaaS gagal, mengaktifkan fallback: {str(e)}")
         return jsonify({'status': 'success', 'answer': jawaban_svm}), 200
 
 
