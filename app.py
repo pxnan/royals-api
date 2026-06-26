@@ -13,12 +13,15 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import bcrypt
 import jwt
+import gzip
 import mysql.connector
 from mysql.connector import Error, pooling
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import LinearSVC
 import pickle
+# FIX #5: TfidfVectorizer/LinearSVC hanya dipakai saat training (lihat train_model()).
+# Diimport lazy di sana agar endpoint lain (chat, login, dll) tidak ikut menanggung
+# biaya import sklearn di top-level saat cold start.
+# Catatan: `import pandas as pd` dihapus karena tidak dipakai sama sekali di file ini —
+# import pandas tanpa pemakaian hanya menambah waktu cold start (~300-800ms) secara percuma.
 from preprocessing import preprocess
 from supabase import create_client, Client  # type: ignore
 
@@ -290,7 +293,15 @@ def load_dataset_from_db():
             conn.close()
 
 def load_model_from_supabase():
-    """Load model dari Supabase Storage ke memori."""
+    """Load model dari Supabase Storage ke memori.
+
+    FIX #6: Timing per-tahap (download / decompress / unpickle) agar mudah
+    melihat di log tahap mana yang sebenarnya paling lambat.
+    FIX #7: Mendukung file model yang sudah dikompresi gzip (lihat
+    save_model_to_supabase). Tetap backward-compatible dengan file lama
+    yang belum dikompresi — jika gzip.decompress gagal, dianggap pickle
+    mentah (perilaku lama).
+    """
     if supabase is None:
         logger.warning("Supabase not configured")
         return None
@@ -304,30 +315,56 @@ def load_model_from_supabase():
         if not file_data:
             logger.error("[Supabase] Download berhasil tapi data kosong/None")
             return None
-        logger.info(f"[Supabase] Download selesai ({len(file_data)} bytes) dalam {time.time()-t0:.2f}s")
-        model_data = pickle.loads(file_data)
-        logger.info(f"[Supabase] Model di-unpickle dalam {time.time()-t0:.2f}s total")
+        t1 = time.time()
+        logger.info(f"[Supabase] Download selesai ({len(file_data)} bytes) dalam {t1-t0:.2f}s")
+
+        try:
+            raw_bytes = gzip.decompress(file_data)
+            t2 = time.time()
+            logger.info(
+                f"[Supabase] Gzip decompress {len(file_data)} -> {len(raw_bytes)} bytes "
+                f"dalam {t2-t1:.2f}s"
+            )
+        except OSError:
+            # File lama (belum dikompresi) — pakai apa adanya
+            raw_bytes = file_data
+            t2 = time.time()
+            logger.info("[Supabase] File tidak terkompresi (model lama), lanjut tanpa decompress")
+
+        model_data = pickle.loads(raw_bytes)
+        t3 = time.time()
+        logger.info(
+            f"[Supabase] Unpickle dalam {t3-t2:.2f}s "
+            f"(total download+load: {t3-t0:.2f}s)"
+        )
         return model_data
     except Exception as e:
         logger.error(f"[Supabase] Gagal load model: {type(e).__name__}: {e}")
         return None
 
 def save_model_to_supabase(model_data):
-    """Simpan model ke Supabase Storage."""
+    """Simpan model ke Supabase Storage (dikompresi gzip untuk mempercepat
+    download & loading di sisi lain — FIX #7)."""
     if supabase is None:
         logger.warning("Supabase not configured, cannot save model")
         return False
     try:
-        model_bytes = pickle.dumps(model_data)
+        model_bytes = pickle.dumps(model_data, protocol=pickle.HIGHEST_PROTOCOL)
+        compressed = gzip.compress(model_bytes, compresslevel=6)
+        logger.info(
+            f"[Supabase] Ukuran model: raw={len(model_bytes)} bytes, "
+            f"gzip={len(compressed)} bytes "
+            f"({100 * len(compressed) / max(len(model_bytes), 1):.0f}% dari ukuran asli)"
+        )
         try:
             supabase.storage.from_(BUCKET_NAME).upload(
-                MODEL_FILE, model_bytes,
+                MODEL_FILE, compressed,
                 file_options={"content-type": "application/octet-stream"}
             )
             logger.info("Model saved to Supabase storage (new file)")
         except Exception:
             supabase.storage.from_(BUCKET_NAME).update(
-                MODEL_FILE, model_bytes,
+                MODEL_FILE, compressed,
                 file_options={"content-type": "application/octet-stream"}
             )
             logger.info("Model updated in Supabase storage")
@@ -382,7 +419,21 @@ def load_models_and_data():
             pertanyaan_list = model_data['questions']
             kategori_list  = model_data.get('categories', [])
             logger.info(f"[Model] Loaded {len(pertanyaan_list)} questions from Supabase")
-            _build_questions_cache()
+
+            # FIX #8: Pakai TF-IDF matrix yang SUDAH dihitung saat training
+            # (disimpan di pickle sebagai 'X_all') alih-alih menghitung ulang
+            # preprocess()+transform() untuk seluruh dataset di setiap cold start.
+            # Ini biasanya jadi bottleneck terbesar di "load model pertama kali"
+            # kalau preprocess() melakukan stemming/normalisasi yang berat.
+            cached_X_all = model_data.get('X_all')
+            if cached_X_all is not None:
+                _X_all_questions_cache = cached_X_all
+                logger.info("[Model] TF-IDF matrix dipulihkan langsung dari pickle (skip recompute)")
+            else:
+                # Backward-compat: model lama belum punya 'X_all', hitung sekali saja.
+                # Setelah training ulang berikutnya, jalur ini tidak akan dipakai lagi.
+                logger.warning("[Model] Model lama tanpa 'X_all' cache — recompute sekali (lambat)")
+                _build_questions_cache()
         else:
             load_dataset_from_db()
             logger.warning("[Model] Tidak ada model di Supabase, dataset saja yang dimuat")
@@ -1658,6 +1709,10 @@ def train_model():
     if request.method == 'OPTIONS':
         return '', 200
     try:
+        # FIX #5: import lazy — hanya endpoint training yang butuh sklearn untuk fit().
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.svm import LinearSVC
+
         start_time = time.time()
 
         conn = get_db_connection()
@@ -1691,7 +1746,11 @@ def train_model():
             'vectorizer': vectorizer,
             'answers': jawaban_list_train,
             'questions': pertanyaan_list_train,
-            'categories': kategori_list_train
+            'categories': kategori_list_train,
+            # FIX #8: simpan matrix TF-IDF yang sudah dihitung supaya saat
+            # load_models_and_data() dipanggil (tiap cold start), tidak perlu
+            # preprocess()+transform() ulang semua pertanyaan dari nol.
+            'X_all': X_train_tfidf,
         }
 
         supabase_saved = save_model_to_supabase(qa_data_new)
@@ -1707,9 +1766,10 @@ def train_model():
         pertanyaan_list = pertanyaan_list_train
         kategori_list = kategori_list_train
         _models_loaded = True
-        _X_all_questions_cache = None   # Invalidate cache
+        # FIX #8: X_train_tfidf sudah dihitung di atas, pakai langsung — tidak perlu
+        # _build_questions_cache() yang akan menjalankan preprocess()+transform() ulang.
+        _X_all_questions_cache = X_train_tfidf
         _X_all_cache_version += 1
-        _build_questions_cache()        # Rebuild cache langsung setelah training
 
         return jsonify({
             'status': 'success',
