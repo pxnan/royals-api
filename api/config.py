@@ -13,6 +13,7 @@ MYSQL_PORT = int(os.getenv("MYSQL_PORT"))
 FLASK_ENV = os.getenv("FLASK_ENV")
 FLASK_DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 FLASK_PORT = int(os.getenv("FLASK_PORT", 5000))
+STARTUP_WARMUP = os.getenv("STARTUP_WARMUP", "true").lower() == "true"
 
 allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(",")] if allowed_origins_str else ["*"]

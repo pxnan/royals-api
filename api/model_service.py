@@ -200,10 +200,9 @@ def _build_questions_cache():
 
 def load_models_and_data():
     """
-    Synchronous model loading — aman untuk Vercel serverless.
-    Tidak pakai background thread / lock karena Vercel membunuh thread
-    antar-request sehingga flag bisa stuck selamanya.
-    Auto-reset _models_loading jika stuck dari request sebelumnya.
+    Load model secara lazy dan thread-safe.
+    Request pertama atau warmup akan memuat model, request lain menunggu lock
+    agar tidak ada download Supabase ganda.
     """
     global model_qa, vectorizer_qa, answers, pertanyaan_list, kategori_list
     global _models_loaded, _models_loading, _X_all_questions_cache
@@ -211,45 +210,53 @@ def load_models_and_data():
     if _models_loaded:
         return
 
-    # Auto-reset jika flag loading stuck (tidak ada thread aktif di serverless)
-    if _models_loading:
-        logger.warning("[Model] Flag _models_loading stuck — auto-reset dan retry")
-        _models_loading = False
+    with _models_lock:
+        if _models_loaded:
+            return
 
-    _models_loading = True
-    try:
-        model_data = load_model_from_supabase()
-        if model_data:
-            model_qa       = model_data['model']
-            vectorizer_qa  = model_data['vectorizer']
-            answers        = model_data['answers']
-            pertanyaan_list = model_data['questions']
-            kategori_list  = model_data.get('categories', [])
-            logger.info(f"[Model] Loaded {len(pertanyaan_list)} questions from Supabase")
+        _models_loading = True
+        try:
+            model_data = load_model_from_supabase()
+            if model_data:
+                model_qa = model_data['model']
+                vectorizer_qa = model_data['vectorizer']
+                answers = model_data['answers']
+                pertanyaan_list = model_data['questions']
+                kategori_list = model_data.get('categories', [])
+                logger.info(f"[Model] Loaded {len(pertanyaan_list)} questions from Supabase")
 
-            # FIX #8: Pakai TF-IDF matrix yang SUDAH dihitung saat training
-            # (disimpan di pickle sebagai 'X_all') alih-alih menghitung ulang
-            # preprocess()+transform() untuk seluruh dataset di setiap cold start.
-            # Ini biasanya jadi bottleneck terbesar di "load model pertama kali"
-            # kalau preprocess() melakukan stemming/normalisasi yang berat.
-            cached_X_all = model_data.get('X_all')
-            if cached_X_all is not None:
-                _X_all_questions_cache = cached_X_all
-                logger.info("[Model] TF-IDF matrix dipulihkan langsung dari pickle (skip recompute)")
+                cached_X_all = model_data.get('X_all')
+                if cached_X_all is not None:
+                    _X_all_questions_cache = cached_X_all
+                    logger.info("[Model] TF-IDF matrix dipulihkan langsung dari pickle (skip recompute)")
+                else:
+                    logger.warning("[Model] Model lama tanpa 'X_all' cache, recompute sekali")
+                    _build_questions_cache()
             else:
-                # Backward-compat: model lama belum punya 'X_all', hitung sekali saja.
-                # Setelah training ulang berikutnya, jalur ini tidak akan dipakai lagi.
-                logger.warning("[Model] Model lama tanpa 'X_all' cache — recompute sekali (lambat)")
-                _build_questions_cache()
-        else:
-            load_dataset_from_db()
-            logger.warning("[Model] Tidak ada model di Supabase, dataset saja yang dimuat")
-        _models_loaded = True
-    except Exception as e:
-        logger.error(f"[Model] load_models_and_data error: {e}")
-        # Tidak set _models_loaded=True agar bisa retry di request berikutnya
-    finally:
-        _models_loading = False
+                load_dataset_from_db()
+                logger.warning("[Model] Tidak ada model di Supabase, dataset saja yang dimuat")
+            _models_loaded = True
+        except Exception as e:
+            logger.error(f"[Model] load_models_and_data error: {e}")
+            # Tidak set _models_loaded=True agar bisa retry di request berikutnya.
+        finally:
+            _models_loading = False
+
+
+def warmup_models_async():
+    """Mulai load model di background agar chat pertama tidak menanggung cold load."""
+    if _models_loaded or _models_loading:
+        return
+
+    def _warmup():
+        t0 = time.time()
+        logger.info("[Warmup] Mulai memuat model di background")
+        load_models_and_data()
+        logger.info(f"[Warmup] Selesai dalam {time.time() - t0:.2f}s")
+
+    thread = threading.Thread(target=_warmup, name="model-warmup", daemon=True)
+    thread.start()
+
 
 
 # ===================== Profanity Filter =====================
@@ -381,7 +388,12 @@ def predict_svm(user_input):
     predicted_category = model_qa.predict(X_input_tfidf)[0]
 
     # 5. Pencocokan jawaban spesifik (mencari dokumen terdekat)
-    X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
+    global _X_all_questions_cache
+    if _X_all_questions_cache is None:
+        _build_questions_cache()
+    X_all_questions_tfidf = _X_all_questions_cache
+    if X_all_questions_tfidf is None:
+        X_all_questions_tfidf = vectorizer_qa.transform([preprocess(q) for q in pertanyaan_list])
     predict_answer_score = (X_input_tfidf * X_all_questions_tfidf.T).toarray().flatten()
 
     # Kumpulkan top-3 alternatif global (untuk konteks n8n)

@@ -66,5 +66,11 @@ def create_app():
             'message': str(e) if config.FLASK_DEBUG else 'Terjadi kesalahan',
         }), 500
 
-    logger.info("[App] Siap. Model akan dimuat synchronous saat request pertama.")
+    if config.STARTUP_WARMUP:
+        from api import model_service
+
+        model_service.warmup_models_async()
+        logger.info("[App] Siap. Warmup model berjalan di background.")
+    else:
+        logger.info("[App] Siap. Model akan dimuat synchronous saat request pertama.")
     return app
